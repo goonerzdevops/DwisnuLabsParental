@@ -1,0 +1,179 @@
+
+Bisa 100%. APK yang dihasilkan sama persis dengan buatan Android Studio, karena proses kompilasi Android sebenarnya tidak dilakukan oleh IDE, melainkan oleh **Gradle** dan **Android SDK CLI**. Android Studio sendiri di balik layar hanya menjalankan perintah terminal yang sama.
+
+Berikut alur kerja minimalis dari koding di VS Code sampai file `.apk` jadi dan terpasang di HP:
+
+---
+
+### 1. Kebutuhan Minimal di Laptop
+
+Hanya butuh dua komponen inti tanpa instalasi Android Studio:
+
+1. **JDK 17** (Temurin / OpenJDK). Pastikan variabel `JAVA_HOME` sudah diset.
+2. **Android Command-line Tools**:
+* Cukup download zip *Command line tools only* dari web developer Android.
+* Ekstrak, lalu gunakan tool `sdkmanager` untuk mengunduh build-tools dan platform target:
+```bash
+sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+```
+
+
+* Set environment variable `ANDROID_HOME` mengarah ke folder SDK tersebut.
+
+
+
+---
+
+### 2. Struktur Folder Project Minimal
+
+Buat struktur folder project seperti ini di workspace VS Code:
+
+```text
+child-lock-agent/
+├── app/
+│   ├── build.gradle.kts
+│   └── src/
+│       └── main/
+│           ├── AndroidManifest.xml
+│           └── java/
+│               └── com/
+│                   └── dwilabs/
+│                       └── agent/
+│                           └── LockService.kt
+├── gradle/
+│   └── wrapper/
+│       ├── gradle-wrapper.jar
+│       └── gradle-wrapper.properties
+├── build.gradle.kts
+├── settings.gradle.kts
+└── gradlew (atau gradlew.bat untuk Windows)
+
+```
+
+---
+
+### 3. File Konfigurasi Inti
+
+#### `settings.gradle.kts` (Root)
+
+```kotlin
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "ChildLockAgent"
+include(":app")
+
+```
+
+#### `build.gradle.kts` (Root)
+
+```kotlin
+plugins {
+    id("com.android.application") version "8.4.0" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.23" apply false
+}
+
+```
+
+#### `app/build.gradle.kts`
+
+```kotlin
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "com.dwilabs.agent"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.dwilabs.agent"
+        minSdk = 26
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+}
+
+```
+
+---
+
+### 4. Eksekusi Build Menjadi APK
+
+Buka terminal terintegrasi di VS Code (`Ctrl + ~`), lalu jalankan:
+
+* **Di Linux / macOS:**
+```bash
+./gradlew assembleDebug
+
+```
+
+
+* **Di Windows (PowerShell / CMD):**
+```powershell
+.\gradlew.bat assembleDebug
+
+```
+
+
+
+Gradle akan otomatis mengunduh dependency dan mengompilasi kode. Begitu muncul status **`BUILD SUCCESSFUL`**, file APK siap pakai langsung terbentuk di folder:
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+
+```
+
+---
+
+### 5. Install Langsung ke HP Target via Terminal VS Code
+
+Sambungkan HP Xiaomi anak via kabel USB (atau gunakan *Wireless Debugging* via `adb connect`), lalu jalankan salah satu perintah:
+
+* **Install via Gradle:**
+```bash
+./gradlew installDebug
+
+```
+
+
+* **Install manual via ADB:**
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+
+```
+
+
+
+APK akan langsung terpasang di HP anak tanpa memerlukan Android Studio sama sekali.
