@@ -61,3 +61,7 @@ captures/
 # OS specific
 .DS_Store
 Thumbs.db
+
+# Cloudflare Wrangler & Node
+.wrangler/
+node_modules/

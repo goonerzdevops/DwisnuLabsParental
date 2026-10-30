@@ -29,6 +29,16 @@ object AppState {
                 context
             }
             prefs = safeContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+            // Auto-migration: Ensure YouTube & YouTube Kids are not blacklisted
+            if (prefs.contains(KEY_BLACKLIST)) {
+                val current = prefs.getStringSet(KEY_BLACKLIST, null)?.toMutableSet()
+                if (current != null && (current.contains("com.google.android.youtube") || current.contains("com.google.android.apps.youtube.kids"))) {
+                    current.remove("com.google.android.youtube")
+                    current.remove("com.google.android.apps.youtube.kids")
+                    prefs.edit().putStringSet(KEY_BLACKLIST, current).apply()
+                }
+            }
         }
     }
 
@@ -57,8 +67,6 @@ object AppState {
         get() {
             return if (::prefs.isInitialized) {
                 prefs.getStringSet(KEY_BLACKLIST, mutableSetOf(
-                    "com.google.android.youtube",
-                    "com.google.android.apps.youtube.kids",
                     "com.zhiliaoapp.musically",
                     "com.dts.freefireth",
                     "com.mobile.legends",

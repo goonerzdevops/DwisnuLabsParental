@@ -1,0 +1,14 @@
+{
+  "name": "dwisnulabs-parental-bot",
+  "version": "1.0.0",
+  "description": "ChildLock Central Agent - Cloudflare Worker Relay",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "login": "wrangler login",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^3.100.0"
+  }
+}
+

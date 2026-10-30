@@ -13,14 +13,35 @@ class DwisnuLabsAccessibilityService : AccessibilityService() {
         private const val TAG = "DwisnuLabsAccessibility"
         private var lastAlertPkg: String = ""
         private var lastAlertTime: Long = 0L
+        private var lastEventTime: Long = 0L
+        private var lastProcessedPkg: String = ""
+
+        @Volatile
+        var instance: DwisnuLabsAccessibilityService? = null
+            private set
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         Log.d(TAG, "DwisnuLabsAccessibilityService connected.")
         AppState.init(applicationContext)
-        // Watchdog: Auto-start LockService & Telegram polling when Accessibility binds
+        // Watchdog: Auto-start LockService when Accessibility binds
         DwisnuLabsLockService.start(applicationContext)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (instance == this) {
+            instance = null
+        }
+    }
+
+    private fun isSystemOrLauncher(pkgName: String): Boolean {
+        if (pkgName == packageName || pkgName == "com.dwisnulabs.agent") return true
+        if (pkgName == "com.android.systemui" || pkgName.contains("systemui", ignoreCase = true)) return true
+        if (pkgName.contains("launcher", ignoreCase = true) || pkgName == "com.miui.home" || pkgName == "com.mi.android.globallauncher") return true
+        return false
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -34,19 +55,38 @@ class DwisnuLabsAccessibilityService : AccessibilityService() {
 
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val pkgName = event.packageName?.toString() ?: return
+            val now = System.currentTimeMillis()
 
-            // 1. Enforce Lock: If locked, immediately restore lock overlay and block access
+            // Debounce fast duplicate events from same package (prevent event storm)
+            if (pkgName == lastProcessedPkg && now - lastEventTime < 250) {
+                return
+            }
+            lastProcessedPkg = pkgName
+            lastEventTime = now
+
+            // 1. Enforce Lock when locked
             if (AppState.isLocked) {
-                if (pkgName != packageName && pkgName != "com.dwisnulabs.agent") {
-                    Log.w(TAG, "Device is LOCKED. Intercepting window switch to: $pkgName")
-                    LockOverlayManager.show(applicationContext)
-                    performGlobalAction(GLOBAL_ACTION_HOME)
+                // Already displaying our own lock screen or alert
+                if (pkgName == packageName || pkgName == "com.dwisnulabs.agent") {
                     return
                 }
+
+                // If on Home Screen or SystemUI (e.g. tablet dock/notification shade),
+                // ensure lock overlay is on screen WITHOUT calling GLOBAL_ACTION_HOME (which causes endless loop)
+                if (isSystemOrLauncher(pkgName)) {
+                    LockOverlayManager.show(applicationContext)
+                    return
+                }
+
+                // If child is opening an app (YouTube, game, etc.) while locked, kick back to home
+                Log.w(TAG, "Device is LOCKED. Intercepting app launch: $pkgName")
+                performGlobalAction(GLOBAL_ACTION_HOME)
+                LockOverlayManager.show(applicationContext)
+                return
             }
 
-            // Ignore common system / self packages
-            if (pkgName == packageName || pkgName == "com.android.systemui" || pkgName.contains("launcher")) {
+            // Ignore common system / self packages when unlocked
+            if (isSystemOrLauncher(pkgName)) {
                 return
             }
 

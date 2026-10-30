@@ -1,10 +1,28 @@
-# Panduan Deploy Cloudflare Worker (1 Menit)
+# Panduan Deploy Cloudflare Worker
 
 Script `worker.js` di folder ini bertindak sebagai **Otak Serverless Telegram Bot Terpusat** untuk mengendalikan 4 HP anak sekaligus.
 
 ---
 
-### Cara Pasang ke Cloudflare (100% Gratis):
+### 🚀 Cara 1: Deploy Langsung via CLI Terminal (Paling Cepat)
+
+1. Masuk ke folder worker di terminal:
+   ```bash
+   cd backend/cloudflare-worker
+   ```
+2. Login sekali saja ke akun Cloudflare Anda (otomatis membuka browser untuk klik "Allow"):
+   ```bash
+   npx wrangler login
+   ```
+3. Deploy seketika tanpa buka web:
+   ```bash
+   npx wrangler deploy
+   ```
+   *Setiap kali ada perubahan kode di `worker.js`, cukup jalankan `npx wrangler deploy` lagi.*
+
+---
+
+### 🌐 Cara 2: Deploy Manual via Dashboard Web:
 
 1. Login ke [dash.cloudflare.com](https://dash.cloudflare.com).
 2. Di sidebar kiri, klik **Workers & Pages** -> **Create application** -> **Create Worker**.

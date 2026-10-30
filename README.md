@@ -38,7 +38,7 @@ Aplikasi agen kontrol orang tua cerdas untuk Android yang dikendalikan secara te
   - Pilihan tema layar gembok: *Critical System Error*, *CPU & Battery Overheat 88°C*, *Security / Trojan Threat*, dan *System UI Stopped*.
   - Dilengkapi *Secret Emergency Tap* untuk membuka kunci darurat oleh orang tua.
 - **🚫 Pemblokiran Aplikasi (Blacklist Intercept)**:
-  - Menggunakan `AccessibilityService` untuk mendeteksi aplikasi terlarang (YouTube, TikTok, game, dll.) dan seketika mengarahkan kembali ke Home Screen.
+  - Menggunakan `AccessibilityService` untuk mendeteksi aplikasi terlarang (TikTok, game, dll.) dan seketika mengarahkan kembali ke Home Screen.
 - **📊 Real-time Device Monitoring**:
   - Deteksi persentase baterai, aplikasi yang sedang dibuka di latar depan (*foreground app*), dan status konektivitas (`🟢 Online` / `🔴 Offline`).
 - **⚡ Super Hemat Baterai (Zero-Polling)**:

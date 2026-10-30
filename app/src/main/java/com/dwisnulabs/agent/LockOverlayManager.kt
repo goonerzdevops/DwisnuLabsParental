@@ -21,6 +21,8 @@ object LockOverlayManager {
     private var windowManager: WindowManager? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    private var currentThemeShowing: ScareTheme? = null
+
     fun isShowing(): Boolean = AppState.isLocked
 
     fun show(context: Context) {
@@ -31,19 +33,37 @@ object LockOverlayManager {
             try {
                 ScareActivity.start(context)
             } catch (e: Exception) {
-                Log.e(TAG, "Error starting ScareActivity: ${e.message}")
+                Log.e(TAG, "Error starting ScareActivity directly: ${e.message}")
+            }
+
+            // Layer 1b: Full-Screen Intent Notification (Guarantees activity start on Android 10-14 & HyperOS)
+            try {
+                DwisnuLabsLockService.triggerLockFullScreenIntent(context)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error triggering full screen notification: ${e.message}")
             }
 
             // Layer 2: WindowManager Fullscreen Overlay
-            if (overlayView != null) return@post
-
             if (!Settings.canDrawOverlays(context)) {
                 Log.w(TAG, "SYSTEM_ALERT_WINDOW permission not granted yet. Using ScareActivity as primary.")
                 return@post
             }
 
+            // If already showing same theme, don't re-create view
+            if (overlayView != null && currentThemeShowing == AppState.scareTheme) {
+                return@post
+            }
+
+            // If theme changed while showing, remove existing first
+            if (overlayView != null && windowManager != null) {
+                try {
+                    windowManager?.removeView(overlayView)
+                } catch (_: Exception) {}
+                overlayView = null
+            }
+
             try {
-                windowManager = context.applicationContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
                 val layoutParams = WindowManager.LayoutParams(
                     WindowManager.LayoutParams.MATCH_PARENT,
@@ -55,23 +75,27 @@ object LockOverlayManager {
                         WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
                     },
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
+                            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
                     PixelFormat.TRANSLUCENT
                 ).apply {
                     gravity = Gravity.CENTER
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    }
                 }
 
-                overlayView = createScareView(context.applicationContext)
+                currentThemeShowing = AppState.scareTheme
+                overlayView = createScareView(context)
                 windowManager?.addView(overlayView, layoutParams)
-                Log.d(TAG, "Scare Lock Overlay displayed successfully.")
+                Log.d(TAG, "Scare Lock Overlay displayed successfully (Theme: ${AppState.scareTheme.name}).")
             } catch (e: Exception) {
                 Log.e(TAG, "Error displaying lock overlay: ${e.message}", e)
             }
         }
     }
 
-    fun hide() {
+    fun hide(context: Context? = null) {
         AppState.isLocked = false
 
         mainHandler.post {
@@ -80,6 +104,11 @@ object LockOverlayManager {
                 ScareActivity.instance?.finish()
             } catch (e: Exception) {
                 Log.e(TAG, "Error finishing ScareActivity: ${e.message}")
+            }
+
+            // Cancel Alert Notification
+            if (context != null) {
+                DwisnuLabsLockService.cancelLockNotification(context)
             }
 
             // Remove Overlay View
@@ -91,6 +120,7 @@ object LockOverlayManager {
                     Log.e(TAG, "Error removing overlay: ${e.message}", e)
                 } finally {
                     overlayView = null
+                    currentThemeShowing = null
                 }
             }
         }

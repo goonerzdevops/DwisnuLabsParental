@@ -17,7 +17,9 @@ class DwisnuLabsLockService : Service() {
     companion object {
         private const val TAG = "DwisnuLabsLockService"
         private const val CHANNEL_ID = "dwisnulabs_core_channel"
+        private const val ALERT_CHANNEL_ID = "dwisnulabs_alert_channel"
         private const val NOTIFICATION_ID = 1001
+        private const val ALERT_NOTIFICATION_ID = 1002
 
         @Volatile
         var isRunning: Boolean = false
@@ -34,6 +36,56 @@ class DwisnuLabsLockService : Service() {
             } catch (e: Exception) {
                 Log.e(TAG, "Error starting DwisnuLabsLockService: ${e.message}", e)
             }
+        }
+
+        fun triggerLockFullScreenIntent(context: Context) {
+            try {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val alertChannel = NotificationChannel(
+                        ALERT_CHANNEL_ID,
+                        "Peringatan Keamanan Sistem",
+                        NotificationManager.IMPORTANCE_HIGH
+                    ).apply {
+                        description = "Notifikasi status kritis keamanan perangkat"
+                        setSound(null, null)
+                        enableVibration(false)
+                        setShowBadge(false)
+                    }
+                    nm.createNotificationChannel(alertChannel)
+                }
+
+                val scareIntent = Intent(context, ScareActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                } else {
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                }
+                val pendingIntent = android.app.PendingIntent.getActivity(context, 991, scareIntent, flags)
+
+                val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
+                    .setContentTitle("Layanan Keamanan Sistem")
+                    .setContentText("Mode keamanan sedang aktif.")
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setCategory(NotificationCompat.CATEGORY_ALARM)
+                    .setFullScreenIntent(pendingIntent, true)
+                    .setAutoCancel(true)
+                    .build()
+
+                nm.notify(ALERT_NOTIFICATION_ID, notification)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error triggering full screen intent notification: ${e.message}")
+            }
+        }
+
+        fun cancelLockNotification(context: Context) {
+            try {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.cancel(ALERT_NOTIFICATION_ID)
+            } catch (_: Exception) {}
         }
     }
 
