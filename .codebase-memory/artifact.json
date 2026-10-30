@@ -1,11 +1,12 @@
 {
     "schema_version": 2,
-    "commit": "dee5e5e4ffed8f132fff27e803b3f8175942b2c0",
-    "indexed_at": "2026-10-30T16:48:06Z",
+    "commit": "d210b76e5ddcdf2c66e21e7c4d1ce8a7000a7832",
+    "indexed_at": "2026-10-30T16:48:40Z",
     "project": "C-D-Project-Mix-Parental",
     "nodes": 391,
     "edges": 939,
     "original_size": 3932160,
-    "compressed_size": 427709,
-    "compression_level": 3
+    "compressed_size": 427838,
+    "compression_level": 3,
+    "reconcile_basis": "git-clean-head"
 }
