@@ -57,7 +57,7 @@ Pembuatan bot Telegram dilakukan melalui aplikasi Telegram:
    *Simpan token ini sebagai `TELEGRAM_BOT_TOKEN`.*
 6. Cari bot **`@userinfobot`** di Telegram, tekan `/start`. Bot akan menampilkan ID numerik Telegram Anda:
    ```text
-   Id: 2050613697
+   Id: 1234567890
    ```
    *Simpan angka ini sebagai `PARENT_CHAT_ID` (Hanya akun ini yang berhak mengontrol bot).*
 
@@ -121,7 +121,7 @@ Anda **tidak perlu** mengotak-atik web dashboard Cloudflare. Seluruh proses depl
    # Masukkan token dari BotFather: 1234567890:ABCdef...
 
    npx wrangler secret put PARENT_CHAT_ID
-   # Masukkan Chat ID Telegram Anda: 2050613697
+   # Masukkan Chat ID Telegram Anda: 1234567890
 
    npx wrangler secret put FIREBASE_DB_URL
    # Masukkan URL Firebase: https://<PROJECT-ID>-default-rtdb.asia-southeast1.firebasedatabase.app

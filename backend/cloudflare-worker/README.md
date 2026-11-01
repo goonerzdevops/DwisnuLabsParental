@@ -29,7 +29,7 @@ Script `worker.js` di folder ini bertindak sebagai **Otak Serverless Telegram Bo
 3. Beri nama worker (misal: `dwisnu-parental-bot`), lalu klik **Deploy**.
 4. Setelah ter-deploy, klik tombol **"Edit code"**.
 5. Hapus semua kode bawaan di editor Cloudflare, lalu **Copy & Paste seluruh isi file [worker.js](file:///c:/D/Project/Mix/Parental/backend/cloudflare-worker/worker.js)** ke editor tersebut.
-6. Ganti nilai `FIREBASE_DB_URL_PLACEHOLDER` pada baris ke-12 dengan URL Realtime Database Firebase Anda (misal: `https://childlock-parental-default-rtdb.firebaseio.com`).
+6. Ganti nilai `FIREBASE_DB_URL_PLACEHOLDER` pada baris ke-12 dengan URL Realtime Database Firebase Anda (misal: `https://your-parental-project-default-rtdb.asia-southeast1.firebasedatabase.app`).
 7. Klik **Save and deploy** di pojok kanan atas.
 8. Salin URL Worker Anda (misal: `https://dwisnu-parental-bot.<username>.workers.dev`).
 

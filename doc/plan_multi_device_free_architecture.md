@@ -57,7 +57,7 @@ Berikut panduan langkah demi langkah yang perlu Anda siapkan. Semua dilakukan vi
 1. Buka browser dan kunjungi: [console.firebase.google.com](https://console.firebase.google.com/).
 2. Login dengan akun Google/Gmail Anda.
 3. Klik tombol **"Add project"** (Tambah project):
-   * Beri nama project: `childlock-parental` (atau nama pilihan Anda).
+   * Beri nama project: `your-parental-project` (atau nama pilihan Anda).
    * Matikan toggle Google Analytics (tidak diperlukan, agar proses cepat).
    * Klik **Create Project**.
 4. Di dashboard Firebase:
