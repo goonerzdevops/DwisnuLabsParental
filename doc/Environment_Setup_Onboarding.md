@@ -148,7 +148,9 @@ Sekarang coba buka bot Telegram Anda dan kirim pesan `/start` atau `/menu`. Bot 
    cd c:\D\Project\Mix\Parental
    ```
 2. Pastikan file `app/google-services.json` telah berada di tempatnya (jika belum ada, gunakan template `app/google-services.json.example` sebagai referensi).
-3. Bersihkan cache build lama dan kompilasi APK baru menggunakan Gradle Wrapper:
+3. *(Opsional)* Kustomisasi nama atau ID perangkat di Telegram:
+   Buka `app/src/main/java/com/dwisnulabs/agent/FirebaseDeviceManager.kt` dan sesuaikan fungsi `resolveDeviceId()` dan `resolveDeviceName()`. Jika dilewati, sistem otomatis memakai model bawaan (`Build.MODEL`).
+4. Bersihkan cache build lama dan kompilasi APK baru menggunakan Gradle Wrapper:
    ```bash
    # Di Windows (PowerShell / Command Prompt):
    .\gradlew.bat assembleDebug

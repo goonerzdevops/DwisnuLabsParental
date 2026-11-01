@@ -126,6 +126,31 @@ adb shell settings put secure accessibility_enabled 1
 
 ---
 
+## Kustomisasi Identitas Perangkat
+
+Sistem mendeteksi dan mendaftarkan perangkat baru secara dinamis ke Firebase Realtime Database. Cloudflare Worker otomatis membaca dan menampilkan seluruh perangkat yang aktif di menu Telegram tanpa perlu modifikasi kode backend.
+
+Jika pengembang ingin menetapkan ID khusus atau label nama perangkat:
+1. Buka berkas: [`app/src/main/java/com/dwisnulabs/agent/FirebaseDeviceManager.kt`](app/src/main/java/com/dwisnulabs/agent/FirebaseDeviceManager.kt)
+2. Sesuaikan pemetaan ID perangkat pada fungsi `resolveDeviceId()`:
+   ```kotlin
+   return when {
+       combined.contains("nama_model_atau_codename") -> "device_anak_1"
+       else -> "device_" + model.replace("[^a-zA-Z0-9]".toRegex(), "_").lowercase()
+   }
+   ```
+3. Sesuaikan label tampilan tombol Telegram pada fungsi `resolveDeviceName()`:
+   ```kotlin
+   return when (devId) {
+       "device_anak_1" -> "📱 Smartphone Anak 1"
+       "device_padse"  -> "📟 Tablet Belajar"
+       else -> Build.MODEL ?: "Perangkat Anak"
+   }
+   ```
+*(Catatan: Jika fungsi di atas tidak diubah, sistem otomatis menggunakan nama model bawaan pabrik dari `Build.MODEL` sebagai label default).*
+
+---
+
 ## Struktur Repositori
 
 ```text
