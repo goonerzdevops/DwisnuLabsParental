@@ -28,6 +28,9 @@ class DwisnuLabsAccessibilityService : AccessibilityService() {
         AppState.init(applicationContext)
         // Watchdog: Auto-start LockService when Accessibility binds
         DwisnuLabsLockService.start(applicationContext)
+        if (AppState.isLocked) {
+            LockOverlayManager.show(this)
+        }
     }
 
     override fun onDestroy() {
@@ -74,14 +77,14 @@ class DwisnuLabsAccessibilityService : AccessibilityService() {
                 // If on Home Screen or SystemUI (e.g. tablet dock/notification shade),
                 // ensure lock overlay is on screen WITHOUT calling GLOBAL_ACTION_HOME (which causes endless loop)
                 if (isSystemOrLauncher(pkgName)) {
-                    LockOverlayManager.show(applicationContext)
+                    LockOverlayManager.show(this)
                     return
                 }
 
                 // If child is opening an app (YouTube, game, etc.) while locked, kick back to home
                 Log.w(TAG, "Device is LOCKED. Intercepting app launch: $pkgName")
                 performGlobalAction(GLOBAL_ACTION_HOME)
-                LockOverlayManager.show(applicationContext)
+                LockOverlayManager.show(this)
                 return
             }
 

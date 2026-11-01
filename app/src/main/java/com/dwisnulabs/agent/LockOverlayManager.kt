@@ -4,12 +4,16 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
@@ -18,7 +22,7 @@ import android.widget.TextView
 object LockOverlayManager {
     private const val TAG = "DwisnuLabsLockOverlay"
     private var overlayView: View? = null
-    private var windowManager: WindowManager? = null
+    private var activeWindowManager: WindowManager? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var currentThemeShowing: ScareTheme? = null
@@ -29,51 +33,67 @@ object LockOverlayManager {
         AppState.isLocked = true
 
         mainHandler.post {
-            // Layer 1: Launch Fullscreen Scare Activity
-            try {
-                ScareActivity.start(context)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error starting ScareActivity directly: ${e.message}")
-            }
+            // Step 1: Pause any active audio/video (e.g. YouTube, TikTok, Games) immediately
+            pauseMediaPlayback(context)
 
-            // Layer 1b: Full-Screen Intent Notification (Guarantees activity start on Android 10-14 & HyperOS)
+            // Step 2: Full-Screen Intent Notification (Android 10-14 & HyperOS system wake-up)
             try {
                 DwisnuLabsLockService.triggerLockFullScreenIntent(context)
             } catch (e: Exception) {
                 Log.e(TAG, "Error triggering full screen notification: ${e.message}")
             }
 
-            // Layer 2: WindowManager Fullscreen Overlay
-            if (!Settings.canDrawOverlays(context)) {
-                Log.w(TAG, "SYSTEM_ALERT_WINDOW permission not granted yet. Using ScareActivity as primary.")
-                return@post
-            }
-
-            // If already showing same theme, don't re-create view
-            if (overlayView != null && currentThemeShowing == AppState.scareTheme) {
-                return@post
-            }
-
-            // If theme changed while showing, remove existing first
-            if (overlayView != null && windowManager != null) {
-                try {
-                    windowManager?.removeView(overlayView)
-                } catch (_: Exception) {}
-                overlayView = null
-            }
-
+            // Step 3: Launch Fullscreen Scare Activity
             try {
-                windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                ScareActivity.start(context)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting ScareActivity directly: ${e.message}")
+            }
 
-                val layoutParams = WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Step 4: System Window Overlay (The unbreakable shield)
+            // Priority 1: Use AccessibilityService with TYPE_ACCESSIBILITY_OVERLAY (Bypasses SYSTEM_ALERT_WINDOW requirement & sits above PiP/YouTube)
+            // Priority 2: Use Context WindowManager with TYPE_APPLICATION_OVERLAY
+            val a11y = DwisnuLabsAccessibilityService.instance
+            val (wm, windowType) = when {
+                a11y != null -> {
+                    Log.d(TAG, "Using TYPE_ACCESSIBILITY_OVERLAY via AccessibilityService (Overlays all windows including PiP).")
+                    Pair(a11y.getSystemService(Context.WINDOW_SERVICE) as WindowManager, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY)
+                }
+                Settings.canDrawOverlays(context) -> {
+                    Log.d(TAG, "Using TYPE_APPLICATION_OVERLAY via system WindowManager.")
+                    val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                     } else {
                         @Suppress("DEPRECATION")
                         WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
-                    },
+                    }
+                    Pair(context.getSystemService(Context.WINDOW_SERVICE) as WindowManager, type)
+                }
+                else -> {
+                    Log.w(TAG, "Neither AccessibilityService nor SYSTEM_ALERT_WINDOW available. Falling back to ScareActivity.")
+                    Pair(null, 0)
+                }
+            }
+
+            if (wm == null) {
+                return@post
+            }
+
+            // If already attached to window with same theme, do nothing
+            if (overlayView != null && overlayView?.isAttachedToWindow == true && currentThemeShowing == AppState.scareTheme) {
+                return@post
+            }
+
+            // Clean up existing overlay before re-adding
+            safelyRemoveOverlay()
+
+            try {
+                activeWindowManager = wm
+
+                val layoutParams = WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    windowType,
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
@@ -86,9 +106,10 @@ object LockOverlayManager {
                 }
 
                 currentThemeShowing = AppState.scareTheme
-                overlayView = createScareView(context)
-                windowManager?.addView(overlayView, layoutParams)
-                Log.d(TAG, "Scare Lock Overlay displayed successfully (Theme: ${AppState.scareTheme.name}).")
+                val targetContext = a11y ?: context
+                overlayView = createScareView(targetContext)
+                wm.addView(overlayView, layoutParams)
+                Log.d(TAG, "Scare Lock Overlay displayed successfully (Type: $windowType, Theme: ${AppState.scareTheme.name}).")
             } catch (e: Exception) {
                 Log.e(TAG, "Error displaying lock overlay: ${e.message}", e)
             }
@@ -112,17 +133,53 @@ object LockOverlayManager {
             }
 
             // Remove Overlay View
-            if (overlayView != null && windowManager != null) {
-                try {
-                    windowManager?.removeView(overlayView)
-                    Log.d(TAG, "Lock overlay removed.")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error removing overlay: ${e.message}", e)
-                } finally {
-                    overlayView = null
-                    currentThemeShowing = null
+            safelyRemoveOverlay()
+        }
+    }
+
+    private fun safelyRemoveOverlay() {
+        val view = overlayView
+        val wm = activeWindowManager ?: (DwisnuLabsAccessibilityService.instance?.getSystemService(Context.WINDOW_SERVICE) as? WindowManager)
+        if (view != null && wm != null) {
+            try {
+                if (view.isAttachedToWindow) {
+                    wm.removeViewImmediate(view)
+                } else {
+                    wm.removeView(view)
                 }
+                Log.d(TAG, "Lock overlay removed.")
+            } catch (e: Exception) {
+                Log.w(TAG, "Safe removeView: ${e.message}")
             }
+        }
+        overlayView = null
+        activeWindowManager = null
+        currentThemeShowing = null
+    }
+
+    private fun pauseMediaPlayback(context: Context) {
+        try {
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+                val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(audioAttributes)
+                    .build()
+                am.requestAudioFocus(focusRequest)
+            } else {
+                @Suppress("DEPRECATION")
+                am.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            }
+
+            val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE)
+            val upEvent = KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PAUSE)
+            am.dispatchMediaKeyEvent(downEvent)
+            am.dispatchMediaKeyEvent(upEvent)
+        } catch (e: Exception) {
+            Log.w(TAG, "Error pausing media playback: ${e.message}")
         }
     }
 
@@ -202,7 +259,8 @@ object LockOverlayManager {
             if (now - lastTapTime < 800) {
                 tapCount++
                 if (tapCount >= 5) {
-                    hide()
+                    hide(context)
+                    FirebaseDeviceManager.syncStatus(context)
                 }
             } else {
                 tapCount = 1

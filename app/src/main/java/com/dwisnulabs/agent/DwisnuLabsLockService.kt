@@ -63,7 +63,18 @@ class DwisnuLabsLockService : Service() {
                 } else {
                     android.app.PendingIntent.FLAG_UPDATE_CURRENT
                 }
-                val pendingIntent = android.app.PendingIntent.getActivity(context, 991, scareIntent, flags)
+
+                val bundle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    val options = android.app.ActivityOptions.makeBasic()
+                    options.setPendingIntentBackgroundActivityStartMode(
+                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                    )
+                    options.toBundle()
+                } else {
+                    null
+                }
+
+                val pendingIntent = android.app.PendingIntent.getActivity(context, 991, scareIntent, flags, bundle)
 
                 val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
                     .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)

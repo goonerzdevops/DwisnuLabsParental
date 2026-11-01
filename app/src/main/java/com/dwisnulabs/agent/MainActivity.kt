@@ -169,6 +169,19 @@ class MainActivity : Activity() {
                 startActivity(intent)
             }
         }
+
+        val isXiaomi = (Build.MANUFACTURER ?: "").contains("Xiaomi", ignoreCase = true) || 
+                       (Build.BRAND ?: "").contains("Xiaomi", ignoreCase = true) || 
+                       (Build.BRAND ?: "").contains("Redmi", ignoreCase = true)
+        if (isXiaomi) {
+            val noteXiaomi = TextView(this).apply {
+                text = "📌 Khusus Xiaomi / HyperOS:\nTekan tombol abu-abu di bawah, lalu buka 'Perizinan Lainnya' dan aktifkan:\n• Mulai di latar belakang (Autostart)\n• Tampil di layar kunci\n• Tampilkan jendela pop-up di latar belakang"
+                textSize = 12f
+                setTextColor(Color.parseColor("#FFD54F"))
+                setPadding(0, 16, 0, 8)
+            }
+            statusContainer.addView(noteXiaomi)
+        }
     }
 
     private fun addInfoRow(label: String, value: String, valueColor: Int) {

@@ -1,389 +1,380 @@
 # BUSINESS REQUIREMENTS DOCUMENT (BRD)
-## Project: ChildLockAgent (Sistem Parental Control Terpusat via Telegram)
+## Project: Multi-Device Stealth Parental Control System (Cloudflare Worker & Firebase RTDB)
 
 | Dokumen | Nilai |
 | :--- | :--- |
-| **Versi Dokumen** | 1.0.0 |
-| **Status** | Approved & Ready for Implementation |
-| **Tanggal Pembuatan** | 26 Oktober 2026 |
-| **Target Platform** | Android 8.0 (API 26) s/d Android 14 (API 34) |
-| **Target Controller** | Telegram Messenger (Bot API) |
-| **Author** | Engineering Team / Antigravity Agent |
+| **Versi Dokumen** | 2.0.0 (Production Verified & Multi-Device Ready) |
+| **Status** | Approved & Fully Implemented |
+| **Target Platform** | Android 8.0 (API 26) s/d Android 14+ (API 34/35) — Termasuk Xiaomi MIUI/HyperOS |
+| **Target Controller** | Telegram Messenger (Inline Keyboards & Slash Commands) |
+| **Serverless Relay** | Cloudflare Workers (V8 Edge Computing Engine) |
+| **Realtime Bus** | Firebase Realtime Database (Google Cloud) |
+| **Klasifikasi** | Open Specification (Privacy-Safe & Sanitized Template) |
 
 ---
 
-## 1. Ringkasan Eksekutif & Latar Belakang
+## 1. Ringkasan Eksekutif & Arsitektur Generasi 2
 
 ### 1.1 Latar Belakang Masalah
-Kecanduan gadget pada anak usia dini dan remaja telah menjadi tantangan utama bagi orang tua modern. Sebagian besar solusi *parental control* komersial yang ada saat ini (seperti Google Family Link, Qustodio, atau Bark) memiliki berbagai kelemahan signifikan:
-1. **Kompleksitas Aplikasi**: Mengharuskan orang tua menginstal aplikasi khusus yang berat, sering mengalami sinkronisasi lambat, dan memiliki antarmuka yang rumit.
-2. **Mudah Dihindari (Bypass)**: Pada perangkat Android vendor tertentu (khususnya Xiaomi/MIUI/HyperOS), aplikasi kontrol sering dimatikan paksa oleh manajemen baterai OS atau dengan mudah dihapus (*uninstall*) oleh anak yang cerdas teknologi.
-3. **Ketergantungan Biaya & Cloud Pihak Ketiga**: Mayoritas mengenakan biaya langganan bulanan (*subscription-based*) dan mengumpulkan data analitik anak ke server pihak ketiga.
+Aplikasi *parental control* komersial yang beredar di pasaran memiliki kelemahan mendasar:
+1. **Aplikasi Orang Tua yang Lambat & Berat**: Mengharuskan orang tua memasang aplikasi terpisah dengan UI berbelit-belit dan pembaruan status yang lambat.
+2. **Mudah Dicurigai & Dihapus Anak**: Ikon aplikasi di beranda memicu anak mencari celah untuk menghapus (*uninstall*) atau mematikan paksa aplikasi pengawas.
+3. **Agresivitas OS Vendor (MIUI / HyperOS / ColorOS)**: Sistem operasi modern secara agresif membunuh layanan latar belakang (*background services*) dan memblokir jendela popup/overlay jika tidak dikonfigurasi dengan izin khusus.
+4. **Masalah Polling Telegram Langsung di HP Anak (Kelemahan Gen-1)**:
+   * Menghubungkan HP anak langsung ke Telegram API via *long-polling* menguras baterai HP anak secara konstan.
+   * Sangat sulit mengelola banyak perangkat (multi-device) secara serentak hanya dengan satu bot token jika semua HP berebut mengambil pesan (*getUpdates race condition*).
 
-### 1.2 Visi & Tujuan Solusi
-**ChildLockAgent** dirancang sebagai solusi *lightweight*, siluman (*ghost mode*), mandiri, dan berpusat pada kepraktisan orang tua. 
-* **Zero Parent-App**: Orang tua **tidak perlu** menginstal aplikasi tambahan di HP mereka. Seluruh pemantauan dan kendali dilakukan 100% melalui **Telegram Bot**.
-* **Mode Siluman (Ghost Mode - Tanpa Icon di Dashboard)**: Aplikasi **tidak memiliki icon di Home Screen maupun App Drawer**. Anak tidak akan mengetahui keberadaan aplikasi ini sehingga tidak akan terpikir untuk mengotak-atik atau menghapusnya.
-* **Kamuflase Komponen Sistem**: Di menu Pengaturan (*Settings -> Apps*), aplikasi disamarkan sebagai layanan sistem bawaan (misal: *"Android System Core"*).
-* **Fleksibilitas Uninstall**: Aplikasi **boleh di-uninstall secara bebas** tanpa mengunci sistem secara agresif. Orang tua dapat menghapusnya kapan saja dengan mudah (via ADB atau perintah Telegram), tanpa repot membuka kunci Device Owner.
-* **Kontrol Granular Realtime**: Mendukung penguncian layar dengan kamuflase kerusakan, pemutusan koneksi Wi-Fi/Internet seluler, serta daftar hitam (*blacklist*) aplikasi.
+### 1.2 Solusi Generasi 2 (Implementasi Nyata)
+Sistem ini mengadopsi arsitektur **Tri-Layer Terdistribusi**:
+* **Telegram Bot**: Sebagai satu-satunya antarmuka kontrol orang tua (100% tanpa aplikasi orang tua, cukup chat via Telegram).
+* **Cloudflare Worker (Serverless Edge Hub)**: Menerima Webhook Telegram secara instan (0ms cold start, gratis 100.000 request/hari), memvalidasi otentikasi orang tua, dan bertindak sebagai pengatur lalu lintas perintah.
+* **Firebase Realtime Database (RTDB)**: Menyimpan state perangkat secara terpusat, mengantrekan perintah saat HP anak sedang offline, dan mendistribusikan instruksi via WebSocket dalam waktu < 100 milidetik.
+* **Android Stealth Agent (HP Anak)**: Berjalan tanpa antarmuka beranda (*headless*), disamarkan sebagai layanan sistem, tahan terhadap pembunuhan memori HyperOS, dan memicu efek jera (*Scare Camouflage*) saat perangkat dikunci.
 
 ---
 
-## 2. Stakeholder & Persona Pengguna
+## 2. Diagram Arsitektur & Alur Kerja Sistem
 
+### 2.1 Diagram Interaksi Komponen
+
+```mermaid
+flowchart TD
+    subgraph Parent["🧑‍💼 Kontrol Orang Tua"]
+        TG[Telegram Messenger App]
+    end
+
+    subgraph Edge["⚡ Serverless Cloud Hub"]
+        CF[Cloudflare Worker Relay]
+        FDB[(Firebase Realtime Database)]
+    end
+
+    subgraph Devices["📱 Perangkat Anak (Multi-Device)"]
+        Dev1["📱 Smartphone Anak 1\n(Android 10/11)"]
+        Dev2["📟 Tablet Anak\n(Android 14 HyperOS)"]
+        Dev3["📱 Smartphone Anak N..."]
+    end
+
+    TG -- "1. Klik Tombol / Slash Command" --> CF
+    CF -- "2. Verifikasi Chat ID & Update State" --> FDB
+    FDB -. "3. Real-time WebSocket Push (<100ms)" .-> Dev1
+    FDB -. "3. Real-time WebSocket Push (<100ms)" .-> Dev2
+    FDB -. "3. Real-time WebSocket Push (<100ms)" .-> Dev3
+    Dev2 -- "4. Sync Status (Baterai, App, LastSeen)" --> FDB
+    FDB -- "5. Status Terkini" --> CF
+    CF -- "6. Edit Pesan Telegram Interaktif" --> TG
 ```
-+---------------------------------------------------------------------------------+
-|                                 STAKEHOLDERS                                    |
-+----------------------------------------+----------------------------------------+
-| 1. Orang Tua (Controller/Admin)        | 2. Anak (End User / Monitored Device)   |
-| • Memegang kendali penuh atas HP anak  | • Mengoperasikan perangkat Android     |
-| • Mengirim instruksi via Telegram      | • Menerima notifikasi edukatif         |
-| • Menerima telemetri dan log realtime  | • Terikat pada aturan dan batas waktu  |
-+----------------------------------------+----------------------------------------+
-```
 
----
-
-## 3. Ruang Lingkup Proyek (Scope of Work)
-
-### 3.1 In-Scope (Fitur Utama)
-1. **Telegram Remote Interface**:
-   * Pengendalian melalui bot Telegram menggunakan *Slash Commands* dan tombol interaktif (*Inline Keyboards*).
-   * Otentikasi ketat: Hanya merespons Telegram ID/Chat ID orang tua yang sah (whitelist).
-2. **Remote Screen Locking & Overlay**:
-   * Kunci layar instan via Telegram (`/lock`).
-   * Buka kunci sementara dengan durasi otomatis (`/unlock 30m`).
-   * Layar penutup (*System Alert Window*) yang tidak bisa di-minimize atau ditutup saat mode terkunci aktif.
-3. **Manajemen Jaringan (Wi-Fi & Internet Kill-Switch)**:
-   * Menyalakan/mematikan Wi-Fi secara remote (`/wifi on`, `/wifi off`).
-   * Firewall lokal (*VpnService*) untuk memutus seluruh koneksi data (Wi-Fi dan Seluler) tanpa mematikan aplikasi penting (misal: WhatsApp keluarga tetap bisa dihubungi).
-4. **App Monitoring & Blocking**:
-   * Deteksi aplikasi foreground secara instan via `AccessibilityService`.
-   * Pemblokiran aplikasi spesifik (YouTube, TikTok, Mobile Legends, Roblox, dll.).
-   * Notifikasi otomatis ke Telegram orang tua ketika anak mencoba membuka aplikasi terlarang.
-5. **Mode Siluman (Ghost Mode & Stealth)**:
-   * **Tanpa Icon di Dashboard**: Tidak ada icon di Home Screen atau App Drawer. Anak tidak akan tahu ada aplikasi pengawas terpasang.
-   * **Kamuflase Komponen Sistem**: Disamarkan sebagai *"Android System Core"* dengan icon sistem standar di menu Pengaturan.
-   * **Fleksibilitas Uninstall**: Bebas di-uninstall kapan saja oleh orang tua (via ADB atau perintah Telegram) tanpa kuncian Device Owner yang kaku.
-   * Auto-start saat HP dinyalakan kembali (*Boot Completed Receiver*).
-6. **Telemetri & Status Perangkat**:
-   * Pengecekan status baterai, level sinyal, koneksi jaringan, dan aplikasi yang sedang aktif di layar.
-
-### 3.2 Out-of-Scope (Bukan Target Proyek)
-* Tidak ada fitur penyadapan mikrofon/kamera rahasia (*non-spyware policy*).
-* Tidak menyediakan panel web multi-tenant (proyek ditujukan untuk *self-hosted/personal family use*).
-* Tidak memerlukan publikasi ke Google Play Store (instalasi internal via ADB).
-
----
-
-## 4. Arsitektur Sistem & Alur Kerja
-
-### 4.1 Diagram Alur Komunikasi
+### 2.2 Alur Eksekusi Perintah Kunci & Gembok
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Parent as Orang Tua (Telegram)
-    participant TG as Telegram Bot API
-    participant Agent as ChildLockAgent (Background Service)
-    participant Acc as Accessibility Service
-    participant DPM as Device Policy Manager
-    participant UI as System Lock Overlay (Layar HP Anak)
+    participant CF as Cloudflare Worker (Webhook)
+    participant RTDB as Firebase Realtime Database
+    participant Agent as Android Background Service
+    participant Overlay as Full-Screen Lock Overlay
 
-    Note over Parent,TG: Fase 1: Perintah Kunci Layar
-    Parent->>TG: Kirim perintah: /lock
-    Agent->>TG: Polling getUpdates (Baca perintah baru)
-    Agent->>UI: Aktifkan Overlay Gembok Layar
-    UI-->>Agent: Layar tertutup gembok
-    Agent->>TG: Balas: "🔒 HP Anak berhasil dikunci."
-
-    Note over Acc,Parent: Fase 2: Anak Mencoba Buka App Terlarang
-    Acc->>Agent: Event: Anak membuka "com.zhiliaoapp.musically" (TikTok)
-    Agent->>Acc: Eksekusi GLOBAL_ACTION_BACK / HOME
-    Agent->>UI: Munculkan pesan peringatan sementara
-    Agent->>TG: Kirim Alert: "⚠️ Anak mencoba membuka TikTok pada 21:15"
-    TG-->>Parent: Notifikasi Telegram Masuk
-
-    Note over Parent,DPM: Fase 3: Kontrol Jaringan
-    Parent->>TG: Tekan tombol [📶 Matikan Wi-Fi]
-    Agent->>TG: Baca callback tombol
-    Agent->>DPM: Eksekusi setWifiEnabled(false) / Vpn Kill-Switch
-    Agent->>TG: Balas: "📶 Wi-Fi dan akses internet dinonaktifkan."
+    Parent->>CF: Tekan tombol [🔒 Kunci Sekarang] pada Tablet
+    Note over CF: Validasi PARENT_CHAT_ID (Whitelist)
+    CF->>RTDB: PATCH /devices/{device_id} -> { command: "LOCK", commandTime: 1730000000 }
+    CF-->>Parent: Update Tampilan Telegram: "🔒 Perintah Kunci Dikirim..."
+    
+    RTDB-->>Agent: OnDataChange WebSocket Event
+    Note over Agent: Cek apakah commandTime > lastExecutedTime
+    Agent->>Overlay: Luncurkan Full-Screen Intent + SYSTEM_ALERT_WINDOW
+    Overlay-->>Agent: Layar tertutup kamuflase sistem error & touch diblokir
+    Agent->>RTDB: PATCH /devices/{device_id} -> { status: "LOCKED", command: "NONE" }
 ```
 
-### 4.2 Strategi Koneksi (Fase 1 vs Fase 2)
-* **Fase 1 (Direct Telegram Client - Implementasi Sekarang)**:
-  * HP anak bertindak sebagai klien HTTPS langsung ke endpoint `https://api.telegram.org/bot<TOKEN>/`.
-  * Menggunakan interval polling dinamis:
-    * **Layar Aktif**: Polling setiap 3–5 detik (responsif terhadap perintah orang tua).
-    * **Layar Mati / Tidur**: Polling diturunkan ke 30–60 detik untuk efisiensi baterai.
-  * *Keunggulan*: Tidak membutuhkan server cloud pihak ketiga, tidak butuh biaya hosting, langsung jalan dari APK.
-* **Fase 2 (Hybrid Cloudflare / Firebase - Opsional di Masa Depan)**:
-  * Menghubungkan Telegram Webhook ke Cloudflare Worker gratis, lalu men-trigger pesan push via Firebase Cloud Messaging (FCM) saat ada perintah darurat.
-
 ---
 
-## 5. Kebutuhan Fungsional Rinci (Functional Requirements)
+## 3. Struktur Skema Data (Firebase Realtime Database)
 
-### FR-1: Remote Control via Telegram Bot
-* **FR-1.1**: Sistem harus melakukan verifikasi `Chat ID` pengirim pesan. Pesan dari pengguna selain orang tua yang terdaftar harus diabaikan secara diam-diam (*silent drop*).
-* **FR-1.2**: Sistem harus menyediakan menu interaktif berupa **Inline Keyboard Buttons** untuk mempermudah eksekusi cepat tanpa perlu mengetik manual.
-* **FR-1.3**: Sistem harus mendukung daftar perintah dasar berikut:
+Struktur JSON database dirancang datar (*flat structure*) dan sangat efisien untuk mendukung banyak perangkat secara bersamaan:
 
-| Perintah Telegram | Argumen | Fungsi & Respon Sistem (Human-Friendly) |
+```json
+{
+  "devices": {
+    "device_smartphone_01": {
+      "command": "NONE",
+      "commandTime": 1730460000000,
+      "status": "UNLOCKED",
+      "battery": 85,
+      "isCharging": false,
+      "foregroundApp": "Google Chrome",
+      "packageName": "com.android.chrome",
+      "lastSeen": 1730460120500,
+      "theme": "SYSTEM_ERROR",
+      "unlockDurationMinutes": 0,
+      "model": "Redmi Note 9 Pro"
+    },
+    "device_tablet_02": {
+      "command": "LOCK",
+      "commandTime": 1730460150000,
+      "status": "LOCKED",
+      "battery": 32,
+      "isCharging": true,
+      "foregroundApp": "YouTube",
+      "packageName": "com.google.android.youtube",
+      "lastSeen": 1730460155000,
+      "theme": "OVERHEAT",
+      "unlockDurationMinutes": 30,
+      "model": "Redmi Pad SE"
+    }
+  }
+}
+```
+
+### Kamus Data Node Perangkat (`/devices/{deviceId}`)
+
+| Properti | Tipe Data | Deskripsi & Nilai Valid |
 | :--- | :--- | :--- |
-| `/start` | - | Menampilkan salam pembuka dan tombol menu utama kendali. |
-| `/status` | - | Melaporkan status terkini (baterai, status kunci, app aktif, status Wi-Fi/Internet, durasi hari ini). |
-| `/lock` | `[alasan]` | Menutup layar seketika dengan overlay gembok dan memblokir interaksi. |
-| `/unlock` | `[durasi]` | Membuka kunci layar. Contoh: `/unlock 30m` (membuka selama 30 menit lalu terkunci otomatis). |
-| `/wifi` | `on` / `off` | Mengaktifkan atau menonaktifkan adapter Wi-Fi di HP anak. |
-| `/internet` | `on` / `off` | Mengaktifkan/mematikan firewall lokal (Internet Kill-Switch total). |
-| `/block` | `[nama_app]` | **Cukup ketik nama umum** (misal: `/block youtube`, `/block roblox`, `/block tiktok`). Sistem otomatis mencocokkan ke package Android. |
-| `/unblock` | `[nama_app]` | Membuka blokir aplikasi berdasarkan nama umum (misal: `/unblock youtube`). |
-| `/apps` | - | **Interactive App Picker**: Menampilkan daftar tombol nama aplikasi ber-emoji status (🟢 Aktif / 🔴 Terblokir). Orang tua cukup ketuk tombol untuk toggle blokir. |
-| `/help` | - | Menampilkan dokumentasi lengkap cara penggunaan perintah. |
+| `command` | String | Perintah aktif yang menunggu eksekusi: `LOCK`, `UNLOCK`, `NETOFF`, `WIFI_OFF`, atau `NONE`. |
+| `commandTime` | Long (ms) | Unix Timestamp saat perintah dikirim oleh orang tua. Mencegah eksekusi ulang perintah lama. |
+| `status` | String | Status visual terkini perangkat: `LOCKED` (Layar terkunci) atau `UNLOCKED` (Layar bebas). |
+| `battery` | Integer | Persentase daya baterai saat ini (0 – 100). |
+| `isCharging` | Boolean | `true` jika perangkat sedang dicas. |
+| `foregroundApp` | String | Nama aplikasi yang saat ini sedang aktif di layar (didapatkan via `AccessibilityService`). |
+| `packageName` | String | ID Package aplikasi yang aktif (misal: `com.google.android.youtube`). |
+| `lastSeen` | Long (ms) | Timestamp heartbeat perangkat. **Wajib menggunakan `ServerValue.TIMESTAMP`** agar kebal terhadap kesalahan jam/waktu lokal di HP anak. |
+| `theme` | String | Tema layar gembok: `SYSTEM_ERROR`, `OVERHEAT`, `SECURITY_THREAT`, atau `FAKE_CRASH`. |
+| `unlockDurationMinutes`| Integer | Durasi menit izin pakai sementara sebelum layar otomatis terkunci kembali. |
+| `model` | String | Nama model perangkat yang terdeteksi otomatis (misal: `Redmi Pad SE`). |
 
 ---
 
-### FR-2: Manajemen Kunci Layar & Overlay (Camouflage & Scare System)
-* **FR-2.1**: Layar gembok (*lock overlay*) harus dibangun menggunakan window type `TYPE_APPLICATION_OVERLAY` dengan bendera `FLAG_NOT_TOUCH_MODAL` dan `FLAG_LAYOUT_IN_SCREEN`.
-* **FR-2.2 (Kebijakan Anti-Branding Orang Tua & Efek Jera)**:
-  * **DILARANG KERAS** memunculkan kata *"Orang Tua"*, *"Parental"*, *"ChildLock"*, atau *"Admin"* di layar anak, agar anak tidak mengetahui bahwa HP sedang dikendalikan dan tidak merengek minta dibuka.
-  * Tampilan layar gembok harus menggunakan **Tema Kamuflase Kerusakan / Keamanan Sistem (Scare Tactics)** untuk menciptakan efek jera, membuat anak panik/takut, dan berhenti bermain HP dengan sendirinya.
-* **FR-2.3 (Pilihan Tema Kamuflase Layar Gembok)**:
-  1. **Tema 1 (Default - Sistem Rusak / Storage Corrupted)**:
-     * Layar hitam monospace bergaya recovery Android:
-       `[ ⚠️ SYSTEM ERROR 0x8849F - KERNEL CRITICAL ]`
-       `CRITICAL STORAGE CORRUPTION DETECTED.`
-       `Sistem memori internal mengalami kegagalan baca/tulis akibat beban berlebih.`
-       `Layar dinonaktifkan sementara untuk mencegah kerusakan permanen pada chipset dan baterai.`
-       `DIANJURKAN: Diamkan perangkat selama 45–60 menit dalam kondisi dingin dan jangan dinyalakan!`
-  2. **Tema 2 (CPU & Baterai Overheat / Bahaya Panas)**:
-     * Tampilan peringatan hardware termal:
-       `[ 🔥 TEMPERATURE ALERT: CPU 88°C - OVERHEATED ]`
-       `Suhu prosesor melampaui ambang batas aman. Risiko kerusakan hardware permanen.`
-       `Sistem dimatikan otomatis untuk pendinginan darurat.`
-  3. **Tema 3 (Security Threat / Terindikasi Hack & Malware)**:
-     * Tampilan security warning:
-       `[ 🛡️ ANDROID SECURITY PROTOCOL - THREAT DETECTED ]`
-       `Penyusupan mencurigakan / trojan berbahaya terdeteksi di jaringan perangkat ini.`
-       `Sistem keamanan telah mengisolasi perangkat untuk mencegah kebocoran data.`
-* **FR-2.4**: Tombol *Back*, *Home*, dan *Recent Apps* harus dinetralisir ketika layar overlay sedang aktif menggunakan bantuan `AccessibilityService`. Form darurat / PIN rahasia untuk orang tua disamarkan (misal: mengetuk teks error 5x secara cepat untuk memunculkan input PIN).
+## 4. Kebutuhan Fungsional Rinci (Functional Requirements)
+
+### FR-1: Antarmuka Kontrol Telegram Terpusat (Cloudflare Worker)
+* **FR-1.1 (Whitelist Chat ID)**: Worker wajib memeriksa ID pengirim (`msg.chat.id` atau `callback_query.from.id`). Jika tidak cocok dengan `PARENT_CHAT_ID`, request diabaikan tanpa respon (*silent drop*).
+* **FR-1.2 (Dashboard Multi-Device Otomatis)**:
+  * Menu utama membaca seluruh node `/devices` di Firebase.
+  * Menampilkan ringkasan status semua anak dalam satu layar (Online/Offline, Baterai, Status Layar, App yang dibuka).
+  * Tombol global: `[ 🔒 KUNCI SEMUA HP ]` dan `[ 🔓 BUKA SEMUA HP ]`.
+* **FR-1.3 (Menu Individual Perangkat)**:
+  * Mengetuk salah satu perangkat membuka panel kendali khusus perangkat tersebut:
+    * `[ 🔒 Kunci Sekarang ]` & `[ 🔓 Buka Kunci ]`
+    * `[ ⏳ Buka 15 Menit ]` & `[ ⏳ Buka 30 Menit ]`
+    * `[ 📶 Putus Internet ]`
+    * `[ 🎭 Ganti Tema Gertakan ]` (Sub-menu tema kamuflase)
+* **FR-1.4 (Toleransi Jam & Status Offline Cerdas)**:
+  * Perangkat dianggap `🟢 Online` jika `lastSeen` berjarak ≤ 4 menit dari waktu server sekarang.
+  * Jika perangkat offline, bot tetap menyimpan perintah di Firebase; perintah akan otomatis dieksekusi begitu perangkat mendapatkan koneksi internet.
 
 ---
 
-### FR-3: Monitoring & Pemblokiran Aplikasi (App Interceptor & Fake Crash)
-* **FR-3.1**: `AccessibilityService` harus memantau event `TYPE_WINDOW_STATE_CHANGED`.
-* **FR-3.2 (Fake Crash & Error Simulation)**:
-  * Ketika package aplikasi yang dibuka cocok dengan daftar *Blacklist*, sistem **TIDAK BOLEH** menampilkan pesan "dibatasi orang tua".
-  * Sistem harus menampilkan **Dialog Fake Crash bawaan Android** seolah-olah aplikasi tersebut rusak sendiri:
-    1. Dialog tiruan sistem: *"Sayangnya, [Nama App] terus berhenti."* atau *"Gagal memuat aset aplikasi (Error 404: Corrupted Data)."*
-    2. Langsung mengeksekusi `performGlobalAction(GLOBAL_ACTION_HOME)` untuk melempar anak kembali ke layar utama.
-    3. Mengirim notifikasi otomatis ke Telegram orang tua dalam waktu maksimal 3 detik.
-* **FR-3.3**: Fitur pembatasan jam tidur (*Bedtime Mode*): Sistem otomatis mengaktifkan mode kamuflase sistem rusak pada rentang jam istirahat malam (misal: 21:00 – 06:00).
-* **FR-3.4 (Zero-Effort Package Name Resolution)**: 
-  * Orang tua **tidak perlu** mengingat atau mengetik nama package sistem (seperti `com.zhiliaoapp.musically` atau `com.google.android.youtube`).
-  * Sistem agen di Android otomatis membaca label nama aplikasi yang ramah manusia (`PackageManager.getApplicationLabel()`).
-  * Jika orang tua mengetik perintah teks, sistem mendukung pencarian nama populer secara cerdas / *case-insensitive* (contoh: `/block youtube`, `/block roblox`, `/block tiktok`, `/block ff`).
-* **FR-3.5 (1-Click Block dari Alert Notifikasi)**:
-  * Setiap kali anak membuka aplikasi (terutama aplikasi baru atau game yang belum diblokir), bot Telegram mengirimkan laporan dengan tombol aksi instan:
-    ```text
-    📱 Anak sedang membuka: Mobile Legends: Bang Bang
-    Waktu buka: 16:30 | Pemakaian: 5 menit
-    [ 🚫 Blokir Game Ini ]   [ ⏳ Izinkan 30 Menit ]   [ 忽略 Abaikan ]
-    ```
-  * Orang tua cukup menekan tombol `[ 🚫 Blokir Game Ini ]` tanpa mengetik satu huruf pun.
-* **FR-3.6 (Interactive App Picker & Category Presets)**:
-  * Menu `/apps` menampilkan daftar tombol inline berisi aplikasi-aplikasi yang terpasang di HP anak, lengkap dengan status visualnya (`🟢 Boleh` / `🔴 Terblokir`). Mengetuk tombol tersebut akan langsung membalikkan (*toggle*) status izin aplikasi.
-  * Mendukung tombol blokir cepat per kategori: `[ 🚫 Blokir Semua Game ]`, `[ 🚫 Blokir Sosmed ]`, dan `[ 🚫 Blokir Streaming ]`.
+### FR-2: Engine Kunci Layar & Full-Screen Intent (Android Agent)
+* **FR-2.1 (Bypass Pembatasan Background Android 10–14)**:
+  * Android 10+ melarang peluncuran Activity dari background.
+  * Solusi: Menggunakan **Full-Screen Intent Notification** (`NotificationCompat.Builder.setFullScreenIntent`) dipadukan dengan izin `USE_FULL_SCREEN_INTENT` dan `SYSTEM_ALERT_WINDOW`. Layar gembok dijamin langsung muncul di atas aplikasi apa pun dalam kondisi apa pun.
+* **FR-2.2 (Sistem Anti-Bypass & Touch Blocker)**:
+  * Tampilan gembok menggunakan WindowManager type `TYPE_APPLICATION_OVERLAY`.
+  * Memblokir seluruh interaksi layar sentuh, bar navigasi, tombol status bar, dan gesture swipe.
+* **FR-2.3 (Tema Kamuflase & Efek Jera / Scare Tactics)**:
+  * **Tidak menampilkan teks orang tua / parental** agar anak tidak menyadari HP sedang dikendalikan.
+  * Pilihan tema:
+    1. `SYSTEM_ERROR` (Default): Layar hitam monospaced bergaya recovery dengan teks `CRITICAL STORAGE CORRUPTION DETECTED. Layar dinonaktifkan sementara untuk pendinginan chipset.`
+    2. `OVERHEAT`: Peringatan hardware `TEMPERATURE ALERT: CPU 88°C - OVERHEATED. Risiko kerusakan baterai permanen.`
+    3. `SECURITY_THREAT`: Peringatan keamanan `ANDROID SECURITY PROTOCOL: Trojan berbahaya terdeteksi di jaringan.`
+    4. `FAKE_CRASH`: Menirukan pesan crash sistem bawaan.
 
 ---
 
-### FR-4: Manajemen Jaringan & Internet Kill-Switch
-* **FR-4.1 (Wi-Fi Control)**:
-  * Melalui hak akses **Device Owner**, sistem mengeksekusi perintah manajemen Wi-Fi tanpa menampilkan dialog persetujuan pengguna.
-* **FR-4.2 (Network Firewall via Local VPN)**:
-  * Menggunakan Android `VpnService` lokal yang merutekan paket data ke antarmuka virtual kosong (*black hole*).
-  * **Whitelist Khusus**: Protokol API Telegram dan aplikasi darurat (misal: WhatsApp orang tua) tetap diizinkan melewati firewall agar perintah remote `/internet on` tetap dapat diterima oleh HP anak.
+### FR-3: Monitoring Aplikasi & Pengamanan Accessibility Service
+* **FR-3.1 (Deteksi Jendela Aktif)**:
+  * `AccessibilityService` mendeteksi event `TYPE_WINDOW_STATE_CHANGED`.
+  * Mengabaikan event jika package yang aktif adalah launcher sistem atau System UI (`isSystemOrLauncher()`).
+* **FR-3.2 (Pencegahan Crash Loop pada Tablet & HyperOS)**:
+  * Pada launcher tablet/dock MIUI/HyperOS, mengeksekusi `GLOBAL_ACTION_HOME` terus-menerus akan memicu proteksi loop Android yang berakibat OS mematikan Accessibility Service secara permanen.
+  * Solusi: Terapkan **Debounce 250ms** dan kecualikan paket sistem:
+    `com.miui.home`, `com.android.systemui`, `com.google.android.apps.nexuslauncher`, `com.sec.android.app.launcher`.
 
 ---
 
-### FR-5: Mode Siluman (Ghost Mode) & Manajemen Uninstall
-* **FR-5.1 (Tanpa Icon Launcher / Headless Dashboard)**:
-  * Manifest aplikasi **TIDAK MENDAFTARKAN** intent filter `android.intent.category.LAUNCHER`.
-  * Aplikasi tidak akan pernah memiliki icon di Home Screen, App Drawer, maupun menu aplikasi utama.
-  * Anak tidak akan menyadari bahwa ada aplikasi tambahan yang terpasang di HP-nya.
-* **FR-5.2 (Kamuflase Nama & Icon di Pengaturan Sistem)**:
-  * Di daftar aplikasi Android (*Settings -> Apps / Kelola Aplikasi*), aplikasi disamarkan dengan label komponen sistem: `"Android System Core"` atau `"System Health Service"` dengan icon standar roda gigi / sistem Android.
-  * Anak tidak akan mencurigai aplikasi ini sebagai aplikasi pihak ketiga, melainkan menganggapnya sebagai bagian dari 100+ layanan inti OS Android.
-* **FR-5.3 (Kemudahan Uninstall bagi Orang Tua)**:
-  * Aplikasi **boleh dan dapat di-uninstall dengan mudah** kapan saja oleh orang tua tanpa harus terjebak kuncian Device Owner:
-    1. **Cara 1 (Via ADB Terminal Laptop)**:
-       ```powershell
-       adb uninstall com.dwisnulabs.agent
-       ```
-    2. **Cara 2 (Via Perintah Telegram)**:
-       Orang tua dapat mengirim perintah `/self_destruct` atau `/uninstall` untuk membersihkan data aplikasi dan mencabut layanan secara mandiri.
-    3. **Cara 3 (Via Menu Settings HP)**:
-       Orang tua dapat membuka *Settings -> Apps*, mencari `"Android System Core"`, dan menekan tombol *Uninstall* secara normal.
+### FR-4: Ketahanan Sistem & Penyamaran (Stealth & Persistence)
+* **FR-4.1 (Headless & Stealth Mode)**:
+  * Tidak menyertakan `android.intent.category.LAUNCHER` pada Activity utama di file `AndroidManifest.xml` (atau dinonaktifkan setelah setup).
+  * Aplikasi tidak muncul di Home Screen maupun App Drawer anak.
+* **FR-4.2 (Kamuflase Layanan Sistem)**:
+  * Disamarkan di daftar aplikasi (*Settings -> Apps*) dengan nama generik seperti `"Android System Core"` atau `"DwisnuLabs Core Service"`.
+* **FR-4.3 (Kemudahan Penghapusan oleh Orang Tua)**:
+  * Dapat dihapus kapan saja secara normal oleh orang tua via kabel ADB atau via pengaturan Android tanpa kuncian Device Owner yang permanen.
 
 ---
 
-## 6. Kebutuhan Non-Fungsional (Non-Functional Requirements)
+## 5. Rincian Izin & Konfigurasi Khusus Android (Vendor Hardening)
 
-| Kategori | Parameter | Spesifikasi & Toleransi |
-| :--- | :--- | :--- |
-| **Reliability** | Uptime Layanan | Service harus bertahan hidup 24/7 dan otomatis restart jika dimatikan paksa (*START_STICKY* + Accessibility Heartbeat). |
-| **Performance** | Latensi Eksekusi | Perintah dari Telegram harus dieksekusi di HP anak dalam waktu ≤ 5 detik pada mode aktif. |
-| **Resource Usage** | Konsumsi Baterai | Pemakaian baterai rata-rata tidak boleh melebihi 2–4% per hari dengan interval polling adaptif. |
-| **Resource Usage** | Konsumsi RAM | Penggunaan memori RAM latar belakang tidak boleh melebihi 40 MB. |
-| **Security** | Otorisasi Akses | Token Telegram Bot disimpan secara aman; verifikasi ketat pada level `chat.id` pengirim. |
-| **Compatibility** | Dukungan Versi OS | Kompatibel penuh dari Android 8.0 (Oreo) hingga Android 14 (Upside Down Cake), termasuk MIUI/HyperOS Xiaomi. |
-
----
-
-## 7. Rincian Izin & Komponen Teknis Android (Technical Manifest)
-
-### 7.1 Daftar Permissions yang Dibutuhkan
+### 5.1 Permissions (`AndroidManifest.xml`)
 ```xml
-<!-- Akses Jaringan untuk Komunikasi ke Telegram -->
+<!-- Komunikasi Data Firebase -->
 <uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-<uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 
-<!-- Tampilan Kunci Layar (Overlay) -->
+<!-- Kunci Layar & Overlay -->
 <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
 <!-- Layanan Latar Belakang & Booting -->
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 <uses-permission android:name="android.permission.WAKE_LOCK" />
+<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-<!-- Query Aplikasi Terpasang (Android 11+) -->
+<!-- Query Nama Aplikasi (Android 11+) -->
 <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 ```
 
-### 7.2 Komponen Arsitektur Utama
-1. **`LockService.kt`** (Foreground Service):
-   * Bertindak sebagai *orchestrator*, memelihara koneksi background worker, dan mengelola state aplikasi (`LOCKED`, `UNLOCKED`, `RESTRICTED`).
-2. **`TelegramPoller.kt`**:
-   * Modul komunikasi HTTPS ringan berbasis `OkHttp` yang menangani `getUpdates`, parsing JSON instruksi, dan pengiriman pesan balik (`sendMessage`).
-3. **`AppMonitorAccessibilityService.kt`**:
-   * Menangkap pergantian jendela aplikasi secara realtime dan mencegah navigasi ke aplikasi yang diblokir.
-4. **`DeviceAdminReceiver.kt`**:
-   * Titik masuk Device Policy Manager (DPM) untuk kebijakan level sistem dan proteksi anti-uninstall.
-5. **`LockOverlayView.kt`**:
-   * Tampilan antarmuka gembok yang digambar langsung ke WindowManager Android.
+### 5.2 Izin Khusus Xiaomi / MIUI / HyperOS via ADB
+Untuk memastikan HP/Tablet Xiaomi tidak mematikan service secara sepihak, perintah ADB berikut wajib dijalankan saat instalasi perdana:
 
----
+```bash
+# 1. Izinkan Autostart / Mulai Otomatis di Latar Belakang (AppOp 10008)
+adb shell cmd appops set <PACKAGE_NAME> 10008 allow
 
-## 8. Matriks Interaksi & Tombol Telegram (UI Orang Tua)
+# 2. Izinkan Tampil di Layar Kunci / Show on Lockscreen (AppOp 10020)
+adb shell cmd appops set <PACKAGE_NAME> 10020 allow
 
-Orang tua akan melihat keyboard interaktif yang ramah pengguna di Telegram tanpa perlu menghafal package name:
+# 3. Izinkan Jendela Pop-up di Latar Belakang (AppOp 10021)
+adb shell cmd appops set <PACKAGE_NAME> 10021 allow
 
-### 8.1 Menu Utama Kendali (Home Remote)
-```text
-+-------------------------------------------------------+
-| 📱 KENDALI HP ANAK (ChildLockAgent)                   |
-| Status: AKTIF | Baterai: 82% | App: YouTube           |
-+-------------------------------------------------------+
-|  [ 🔒 KUNCI SEKARANG ]   |   [ 🔓 BUKA KUNCI ]        |
-+--------------------------+----------------------------+
-|  [ ⏳ BUKA 15 MENIT ]    |   [ ⏳ BUKA 30 MENIT ]     |
-+--------------------------+----------------------------+
-|  [ 📶 MATIKAN WI-FI ]    |   [ 🌐 BLOKIR INTERNET ]   |
-+--------------------------+----------------------------+
-|  [ 📱 KELOLA APLIKASI ]  |   [ ⚙️ STATUS PERANGKAT ]  |
-+-------------------------------------------------------+
-```
+# 4. Izinkan Menggambar di Atas Aplikasi Lain (System Alert Window)
+adb shell pm grant <PACKAGE_NAME> android.permission.SYSTEM_ALERT_WINDOW
 
-### 8.2 Menu Kelola Aplikasi (Interactive App Picker via `/apps`)
-Orang tua cukup mengetuk tombol untuk mengubah status blokir:
-```text
-+-------------------------------------------------------+
-| 📱 KELOLA DAFTAR APLIKASI ANAK                        |
-| Ketuk nama aplikasi untuk Mengizinkan (🟢) / Blokir (🔴) |
-+-------------------------------------------------------+
-|  [ 🔴 YouTube (Diblokir) ]  |  [ 🟢 WhatsApp (Boleh) ] |
-+-----------------------------+--------------------------+
-|  [ 🔴 TikTok (Diblokir) ]   |  [ 🔴 Roblox (Diblokir) ]|
-+-----------------------------+--------------------------+
-|  [ 🟢 Google Classroom ]    |  [ 🔴 Mobile Legends ]   |
-+-----------------------------+--------------------------+
-|  [ 🚫 BLOKIR SEMUA GAME ]   |  [ 🚫 BLOKIR SOSMED ]    |
-+-------------------------------------------------------+
-|  [ ⬅️ KEMBALI KE MENU UTAMA ]                         |
-+-------------------------------------------------------+
-```
+# 5. Nonaktifkan Pembatasan Baterai (Unrestricted Battery)
+adb shell dumpsys deviceidle whitelist +<PACKAGE_NAME>
 
-### 8.3 Notifikasi Cerdas & Tombol Instan (1-Click Action)
-Saat anak membuka game atau aplikasi apa pun di HP:
-```text
-+-------------------------------------------------------+
-| ⚠️ PERINGATAN: ANAK MEMBUKA APLIKASI                   |
-| Aplikasi: Mobile Legends: Bang Bang                   |
-| Waktu Buka: 16:30 | Pemakaian Hari Ini: 15 menit      |
-+-------------------------------------------------------+
-|  [ 🚫 BLOKIR GAME INI ]  |  [ ⏳ BERI WAKTU 30 MENIT ]|
-+-------------------------------------------------------+
-|  [ 🙈 ABAIKAN ]                                       |
-+-------------------------------------------------------+
-```
-
-### 8.4 Pilihan Tema Gertakan / Kamuflase (Scare Mode Selector)
-Orang tua dapat memilih gaya kamuflase yang paling efektif untuk anaknya:
-```text
-+-------------------------------------------------------+
-| 🎭 PILIH TEMA GERTAKAN / KAMUFLASE LAYAR              |
-| Efek visual saat layar dikunci atau app diblokir:      |
-+-------------------------------------------------------+
-|  [ ⚠️ SISTEM RUSAK / ERROR ]                          |
-|  (Layar recovery hitam, pesan memori internal jebol)  |
-+-------------------------------------------------------+
-|  [ 🔥 OVERHEAT PANAS 88°C ]                           |
-|  (Peringatan baterai/CPU panas, bahaya terbakar)      |
-+-------------------------------------------------------+
-|  [ 🛡️ TERINDIKASI VIRUS / HACK ]                     |
-|  (Peringatan Android Firewall: Penyusupan berbahaya)  |
-+-------------------------------------------------------+
-|  [ 💥 FAKE CRASH (APP RUSAK SENDIRI) ]                |
-|  (Dialog sistem bawaan: "Aplikasi terus berhenti")    |
-+-------------------------------------------------------+
-|  [ ⬅️ KEMBALI KE MENU UTAMA ]                         |
-+-------------------------------------------------------+
+# 6. Aktifkan Layanan Aksesibilitas Langsung via Terminal
+adb shell settings put secure enabled_accessibility_services <PACKAGE_NAME>/<PACKAGE_NAME>.DwisnuLabsAccessibilityService
+adb shell settings put secure accessibility_enabled 1
 ```
 
 ---
 
-## 9. Rencana Rilis & Roadmap Implementasi
+## 6. Blueprint Implementasi Mandiri (Replication Blueprint)
 
-```mermaid
-gantt
-    title Roadmap Pengembangan ChildLockAgent
-    dateFormat  YYYY-MM-DD
-    section Fase 1: Core Engine
-    Setup Project & Verification       :done, 2026-10-25, 1d
-    DeviceAdmin & DeviceOwner Setup    :active, 2026-10-26, 2d
-    Accessibility Monitoring Service   :2026-10-28, 2d
-    System Alert Window (Lock Overlay) :2026-10-30, 2d
-    section Fase 2: Telegram Integration
-    Telegram Bot Client (OkHttp Poller):2026-11-01, 3d
-    Command Parser & Inline Keyboards  :2026-11-04, 2d
-    Wi-Fi & Internet Kill-Switch Logic :2026-11-06, 2d
-    section Fase 3: Testing & Hardening
-    Uji Coba Lapangan di HP Xiaomi     :2026-11-08, 3d
-    Pengujian Anti-Uninstall & Reboot  :2026-11-11, 2d
-    Final Release & Handover           :2026-11-13, 1d
-```
+Siapa pun yang ingin membangun sistem ini secara presisi dapat mengikuti 5 langkah berurutan di bawah ini:
+
+### Langkah 1: Buat Bot Telegram & Catat Kredensial
+1. Buka Telegram, cari bot resmi `@BotFather`.
+2. Kirim perintah `/newbot`, ikuti petunjuk, lalu simpan token bot:
+   * Format: `1234567890:ABCdefGHIjklMNOpqrSTUvwxyz` -> Simpan sebagai `<BOT_TOKEN>`
+3. Buka bot `@userinfobot` untuk mengetahui ID Telegram pribadi Anda:
+   * Format: `123456789` -> Simpan sebagai `<PARENT_CHAT_ID>`
 
 ---
 
-## 10. Persetujuan & Tanda Tangan
+### Langkah 2: Setup Firebase Realtime Database
+1. Buka [Firebase Console](https://console.firebase.google.com/) dan buat project baru.
+2. Tambahkan **Realtime Database**, pilih region terdekat (misal: `asia-southeast1`).
+3. Konfigurasi **Security Rules** (Rules awal untuk pengujian):
+   ```json
+   {
+     "rules": {
+       ".read": true,
+       ".write": true
+     }
+   }
+   ```
+4. Salin URL database Anda:
+   * Format: `https://<YOUR-PROJECT-ID>-default-rtdb.<REGION>.firebasedatabase.app` -> Simpan sebagai `<FIREBASE_DB_URL>`
+5. Di Firebase Project Settings, daftarkan aplikasi Android dengan Package Name pilihan Anda, lalu download file `google-services.json` dan letakkan di folder `app/` project Android Anda.
 
-Dokumen spesifikasi kebutuhan bisnis ini menjadi acuan tunggal dan sah untuk perancangan kode, struktur database internal, dan pengujian penerimaan sistem (*User Acceptance Test*).
+---
 
-* **Disetujui oleh**: Pemilik Proyek / Product Owner
-* **Status**: Siap untuk eksekusi implementasi teknis.
+### Langkah 3: Deploy Cloudflare Worker (Tanpa Biaya Server)
+1. Buat folder `backend/cloudflare-worker/`, lalu inisialisasi konfigurasi:
+   * `package.json`:
+     ```json
+     {
+       "name": "parental-bot-relay",
+       "main": "worker.js",
+       "dependencies": {}
+     }
+     ```
+   * `wrangler.toml`:
+     ```toml
+     name = "parental-bot-relay"
+     main = "worker.js"
+     compatibility_date = "2024-01-01"
+     ```
+2. Siapkan kode `worker.js` dengan mengambil variabel rahasia dari Cloudflare Environment:
+   ```javascript
+   export default {
+     async fetch(request, env, ctx) {
+       if (request.method !== "POST") return new Response("Relay Active", { status: 200 });
+       const update = await request.json();
+       await handleTelegramUpdate(update, env);
+       return new Response("OK", { status: 200 });
+     }
+   };
+   ```
+3. Deploy dari terminal:
+   ```bash
+   npx wrangler login
+   npx wrangler deploy
+   ```
+4. Simpan kredensial rahasia secara aman di Cloudflare (tanpa hardcode di file kode):
+   ```bash
+   npx wrangler secret put TELEGRAM_BOT_TOKEN
+   npx wrangler secret put PARENT_CHAT_ID
+   npx wrangler secret put FIREBASE_DB_URL
+   ```
+5. Daftarkan Webhook Telegram ke URL Cloudflare Worker yang didapatkan:
+   ```text
+   https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://parental-bot-relay.<SUBDOMAIN>.workers.dev
+   ```
+
+---
+
+### Langkah 4: Konfigurasi & Build Android Agent
+1. Buka project Android di Android Studio / VS Code.
+2. Pastikan file `google-services.json` sudah berada di direktori `app/`.
+3. Pada `FirebaseDeviceManager.kt`, arahkan koneksi ke database Anda:
+   ```kotlin
+   private const val FIREBASE_URL = "<FIREBASE_DB_URL>"
+   ```
+4. Build APK debug/release:
+   ```bash
+   ./gradlew assembleDebug
+   ```
+
+---
+
+### Langkah 5: Instalasi & Pengujian di Perangkat Anak
+1. Hubungkan HP/Tablet anak ke laptop via kabel USB (aktifkan *USB Debugging*).
+2. Install APK:
+   ```bash
+   adb install -r app/build/outputs/apk/debug/app-debug.apk
+   ```
+3. Berikan izin dasar dan khusus vendor (lihat Bab 5.2).
+4. Buka bot Telegram Anda, kirim `/menu` atau `/status`. Perangkat anak akan langsung terdeteksi di menu interaktif Telegram!
+
+---
+
+## 7. Panduan Keamanan & Perlindungan Privasi (Privacy-First Standard)
+
+Bagi siapa pun yang memelihara atau memodifikasi kode repositori ini:
+
+> [!CAUTION]
+> **ATURAN WAJIB SEBELUM COMMIT / SHARE REPO:**
+> 1. **Dilarang Keras Menulis Kredensial Langsung di Kode**:
+>    * Jangan pernah melakukan *hardcode* token bot Telegram, Chat ID Telegram, atau secret Firebase di file `.kt`, `.js`, atau `.md`.
+>    * Gunakan *Environment Variables* di Cloudflare (`wrangler secret put`) dan `BuildConfig` / `local.properties` di Android.
+> 2. **File yang Wajib Di-Ignore (`.gitignore`)**:
+>    * `app/google-services.json` (Gunakan template `app/google-services.json.example`).
+>    * `local.properties`
+>    * File konfigurasi kredensial lokal lainnya.
+> 3. **Penyensoran Informasi Pribadi**:
+>    * Hindari menamai perangkat dengan nama asli anak di dalam source code statis. Gunakan identifikasi dinamis dari sistem (`Build.MODEL`).
+
+---
+
+## 8. Persetujuan & Status Dokumen
+
+Dokumen Business Requirements Document (BRD) v2.0.0 ini mencerminkan arsitektur produksi yang telah teruji secara nyata, stabil di berbagai varian Android (termasuk Xiaomi HyperOS), dan siap dijadikan referensi teknis baku.
+
+* **Status Implementasi**: 100% Selesai & Terverifikasi
+* **Dukungan Platform**: Multi-Device Android Agent + Cloudflare Edge Relay + Firebase RTDB + Telegram UI Bot
