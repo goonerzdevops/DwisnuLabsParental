@@ -35,11 +35,16 @@ Script `worker.js` di folder ini bertindak sebagai **Otak Serverless Telegram Bo
 
 ---
 
-### Cara Menghubungkan Telegram ke Cloudflare Worker (Set Webhook):
+### Cara Menghubungkan Telegram ke Cloudflare Worker (Set Webhook via Terminal):
 
-Cukup buka browser Anda dan ketik URL berikut (ganti `<URL_WORKER_ANDA>` dengan URL dari Cloudflare):
+Jalankan perintah ini di terminal (cukup sekali saja):
+```bash
+curl -F "url=https://<NAMA_WORKER>.<SUBDOMAIN>.workers.dev" https://api.telegram.org/bot<TOKEN_BOT_TELEGRAM>/setWebhook
 ```
-https://api.telegram.org/bot8663165335:AAHqGIqCt_68w4lJIZUGcfJFoFmmNI7BnmU/setWebhook?url=<URL_WORKER_ANDA>
+
+Atau buka di browser:
+```text
+https://api.telegram.org/bot<TOKEN_BOT_TELEGRAM>/setWebhook?url=https://<NAMA_WORKER>.<SUBDOMAIN>.workers.dev
 ```
 
 Jika sukses, browser akan menampilkan pesan:

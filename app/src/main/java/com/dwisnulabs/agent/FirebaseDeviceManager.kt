@@ -15,7 +15,11 @@ import com.google.firebase.database.ValueEventListener
 
 object FirebaseDeviceManager {
     private const val TAG = "DwisnuFirebase"
-    private const val FIREBASE_URL = "https://childlock-parental-default-rtdb.asia-southeast1.firebasedatabase.app"
+    /**
+     * URL Firebase Realtime Database.
+     * Jika dikosongkan (""), Firebase otomatis membaca URL dari google-services.json.
+     */
+    private const val FIREBASE_URL = ""
 
     val deviceId: String by lazy { resolveDeviceId() }
     val deviceName: String by lazy { resolveDeviceName(deviceId) }
@@ -23,6 +27,14 @@ object FirebaseDeviceManager {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isInitialized = false
     private var lastSyncedApp = ""
+
+    private fun getDatabase(): FirebaseDatabase {
+        return if (FIREBASE_URL.isNotBlank() && !FIREBASE_URL.contains("YOUR-PROJECT")) {
+            FirebaseDatabase.getInstance(FIREBASE_URL)
+        } else {
+            FirebaseDatabase.getInstance()
+        }
+    }
 
     private fun resolveDeviceId(): String {
         val model = Build.MODEL ?: ""
@@ -41,11 +53,11 @@ object FirebaseDeviceManager {
 
     private fun resolveDeviceName(devId: String): String {
         return when (devId) {
-            "device_note9pro" -> "👦 Kakak (Redmi Note 9 Pro)"
-            "device_redmi9t" -> "👧 Adik 1 (Redmi 9T)"
+            "device_note9pro" -> "📱 Smartphone 1 (Redmi Note 9 Pro)"
+            "device_redmi9t" -> "📱 Smartphone 2 (Redmi 9T)"
             "device_padse" -> "📟 Tablet (Redmi Pad SE)"
-            "device_iqooz10" -> "📱 Adik 2 (iQOO Z10)"
-            else -> Build.MODEL ?: "HP Anak"
+            "device_iqooz10" -> "📱 Smartphone 3 (iQOO Z10)"
+            else -> Build.MODEL ?: "Perangkat Anak"
         }
     }
 
@@ -54,7 +66,7 @@ object FirebaseDeviceManager {
         isInitialized = true
 
         try {
-            val db = FirebaseDatabase.getInstance(FIREBASE_URL)
+            val db = getDatabase()
             db.goOnline()
             val deviceRef = db.getReference("devices").child(deviceId)
 
@@ -109,7 +121,7 @@ object FirebaseDeviceManager {
 
     fun syncStatus(context: Context) {
         try {
-            val db = FirebaseDatabase.getInstance(FIREBASE_URL)
+            val db = getDatabase()
             val deviceRef = db.getReference("devices").child(deviceId)
 
             val statusMap = hashMapOf<String, Any>(

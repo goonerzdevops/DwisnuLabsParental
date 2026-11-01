@@ -1,13 +1,14 @@
 {
   "project_info": {
-    "project_number": "906515318927",
-    "project_id": "childlock-parental",
-    "storage_bucket": "childlock-parental.firebasestorage.app"
+    "project_number": "123456789012",
+    "firebase_url": "https://your-parental-project-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "your-parental-project",
+    "storage_bucket": "your-parental-project.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:906515318927:android:4a2cfcb0f5a873053f88fa",
+        "mobilesdk_app_id": "1:123456789012:android:abcdef1234567890",
         "android_client_info": {
           "package_name": "com.dwisnulabs.agent"
         }
@@ -15,7 +16,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCbullez7_tQ5hrHMiUTsBvSG2OjxfZIAA"
+          "current_key": "AIzaSyYOUR_FIREBASE_API_KEY_HERE"
         }
       ],
       "services": {

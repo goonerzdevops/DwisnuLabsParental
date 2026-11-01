@@ -3,12 +3,12 @@
  * 100% Free Serverless Webhook for Multi-Device Parental Control
  */
 
-// Kredensial & Konfigurasi (Bisa diisi di sini atau via Cloudflare Environment Variables)
+// Kredensial & Konfigurasi Default (Direkomendasikan diisi via Cloudflare Secret CLI: npx wrangler secret put)
 const CONFIG = {
-  TELEGRAM_BOT_TOKEN: "8663165335:AAHqGIqCt_68w4lJIZUGcfJFoFmmNI7BnmU",
-  PARENT_CHAT_ID: 2050613697,
+  TELEGRAM_BOT_TOKEN: "YOUR_TELEGRAM_BOT_TOKEN_HERE",
+  PARENT_CHAT_ID: 0,
   // URL Firebase Realtime Database Anda
-  FIREBASE_DB_URL: "https://childlock-parental-default-rtdb.asia-southeast1.firebasedatabase.app"
+  FIREBASE_DB_URL: "https://YOUR_PROJECT_ID-default-rtdb.asia-southeast1.firebasedatabase.app"
 };
 
 export default {

@@ -55,8 +55,17 @@ captures/
 .externalNativeBuild
 .cxx/
 
-# Google Services (opsional jika ingin dirahasiakan, namun jika dibutuhkan bisa dikecualikan)
-# google-services.json
+# Google Services (Secrets)
+app/google-services.json
+google-services.json
+
+# IDE & Editor specific
+.cursor/
+.vscode/
+
+# Environment local files
+.env
+.env.*
 
 # OS specific
 .DS_Store
