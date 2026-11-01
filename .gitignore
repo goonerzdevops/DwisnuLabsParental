@@ -62,6 +62,7 @@ google-services.json
 # IDE & Editor specific
 .cursor/
 .vscode/
+.codebase-memory/
 
 # Environment local files
 .env
