@@ -319,7 +319,7 @@ object TelegramBotClient {
         val isCut = AppState.isInternetBlocked
         val internetStatus = if (isCut) "❌ Diputus (Buffering Mode)" else "✅ Normal (Aktif)"
         val report = """
-            📱 <b>STATUS HP ANAK (Redmi Note 9 Pro)</b>
+            📱 <b>STATUS HP ANAK (${FirebaseDeviceManager.deviceName})</b>
             ━━━━━━━━━━━━━━━━━━━
             🔋 Baterai       : $batteryPct%
             🔒 Status Kunci  : $lockStatus

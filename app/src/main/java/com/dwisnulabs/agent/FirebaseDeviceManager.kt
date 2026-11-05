@@ -53,8 +53,8 @@ object FirebaseDeviceManager {
 
     private fun resolveDeviceName(devId: String): String {
         return when (devId) {
-            "device_note9pro" -> "📱 Smartphone 1 (Redmi Note 9 Pro)"
-            "device_redmi9t" -> "📱 Smartphone 2 (Redmi 9T)"
+            "device_note9pro" -> "📱 Adik (Redmi Note 9 Pro)"
+            "device_redmi9t" -> "📱 Kakak (Redmi 9T)"
             "device_padse" -> "📟 Tablet (Redmi Pad SE)"
             "device_iqooz10" -> "📱 Smartphone 3 (iQOO Z10)"
             else -> Build.MODEL ?: "Perangkat Anak"

@@ -85,7 +85,7 @@ async function handleTelegramUpdate(update, env) {
       await sendDeviceSubMenu(botToken, fromId, dbUrl, devId);
     } else if (data.startsWith("CMD_THEME_")) {
       const devId = data.replace("CMD_THEME_", "");
-      await sendThemesSubMenu(botToken, fromId, devId);
+      await sendThemesSubMenu(botToken, fromId, devId, dbUrl);
     } else if (data.startsWith("CMD_")) {
       // Format: CMD_<ACTION>_<DEVICE_ID>
       const parts = data.split("_");
@@ -96,8 +96,30 @@ async function handleTelegramUpdate(update, env) {
   }
 }
 
+// Helper Format Nama Tampilan Perangkat (Kakak Redmi 9T & Adik Redmi Note 9 Pro)
+function getDeviceDisplayName(devId, dev) {
+  if (devId === "device_redmi9t" || dev?.model?.toLowerCase()?.includes("9t") || dev?.model?.toLowerCase()?.includes("m2010j19") || dev?.model?.toLowerCase()?.includes("lime")) {
+    return "📱 Kakak (Redmi 9T)";
+  }
+  if (devId === "device_note9pro" || dev?.model?.toLowerCase()?.includes("note 9 pro") || dev?.model?.toLowerCase()?.includes("joyeuse") || dev?.model?.toLowerCase()?.includes("curtana")) {
+    return "📱 Adik (Redmi Note 9 Pro)";
+  }
+  if (dev?.name && !dev.name.includes("Smartphone 1") && !dev.name.includes("Smartphone 2")) {
+    if (dev.name.includes("Note 9 Pro")) return "📱 Adik (Redmi Note 9 Pro)";
+    if (dev.name.includes("9T")) return "📱 Kakak (Redmi 9T)";
+    return dev.name;
+  }
+  if (devId === "device_padse") return "📟 Tablet (Redmi Pad SE)";
+  if (devId === "device_iqooz10") return "📱 Smartphone 3 (iQOO Z10)";
+  return dev?.name || devId;
+}
+
 // Sub-Menu Pilihan Tema Gertakan untuk 1 Perangkat
-async function sendThemesSubMenu(botToken, chatId, devId) {
+async function sendThemesSubMenu(botToken, chatId, devId, dbUrl) {
+  const devices = await getDevicesFromFirebase(dbUrl);
+  const dev = devices[devId];
+  const devName = getDeviceDisplayName(devId, dev);
+
   const keyboard = [
     [
       { text: "⚠️ Sistem Rusak / Error", callback_data: `CMD_SET-THEME-ERROR_${devId}` },
@@ -112,7 +134,7 @@ async function sendThemesSubMenu(botToken, chatId, devId) {
     ]
   ];
 
-  const text = `🎭 <b>Pilih Gaya Gertakan / Kamuflase untuk ${devId}:</b>\nTema ini akan langsung muncul di layar saat terkunci:`;
+  const text = `🎭 <b>Pilih Gaya Gertakan / Kamuflase untuk ${devName}:</b>\nTema ini akan langsung muncul di layar saat terkunci:`;
   await sendTelegramMessage(botToken, chatId, text, { inline_keyboard: keyboard });
 }
 
@@ -146,7 +168,19 @@ function getDeviceOnlineStatus(lastSeen) {
 // Mengirim Menu Utama dengan daftar semua perangkat
 async function sendMainMenu(botToken, chatId, dbUrl) {
   const devices = await getDevicesFromFirebase(dbUrl);
-  const deviceKeys = Object.keys(devices);
+  // Filter hanya key device valid (abaikan root command atau objek lain)
+  const deviceKeys = Object.keys(devices).filter(k => k.startsWith("device_") || devices[k]?.model || devices[k]?.name);
+
+  // Urutkan prioritas: Kakak (Redmi 9T), Adik (Redmi Note 9 Pro), Tablet, lalu lainnya
+  const priority = ["device_redmi9t", "device_note9pro", "device_padse", "device_iqooz10"];
+  deviceKeys.sort((a, b) => {
+    const idxA = priority.indexOf(a);
+    const idxB = priority.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
 
   let keyboard = [];
 
@@ -165,8 +199,9 @@ async function sendMainMenu(botToken, chatId, dbUrl) {
     const lockIcon1 = d1.isLocked ? "🔒" : "🔓";
     const st1 = getDeviceOnlineStatus(d1.lastSeen);
     const dot1 = st1.isOnline ? "🟢" : "🔴";
+    const name1 = getDeviceDisplayName(k1, d1);
     row.push({
-      text: `${lockIcon1} ${dot1} ${d1.name || k1} (${d1.battery || 0}%)`,
+      text: `${lockIcon1} ${dot1} ${name1} (${d1.battery || 0}%)`,
       callback_data: `DEV_MENU_${k1}`
     });
 
@@ -176,8 +211,9 @@ async function sendMainMenu(botToken, chatId, dbUrl) {
       const lockIcon2 = d2.isLocked ? "🔒" : "🔓";
       const st2 = getDeviceOnlineStatus(d2.lastSeen);
       const dot2 = st2.isOnline ? "🟢" : "🔴";
+      const name2 = getDeviceDisplayName(k2, d2);
       row.push({
-        text: `${lockIcon2} ${dot2} ${d2.name || k2} (${d2.battery || 0}%)`,
+        text: `${lockIcon2} ${dot2} ${name2} (${d2.battery || 0}%)`,
         callback_data: `DEV_MENU_${k2}`
       });
     }
@@ -202,9 +238,13 @@ async function sendMainMenu(botToken, chatId, dbUrl) {
 }
 
 // Menu Kendali Khusus 1 Perangkat
-async function sendDeviceSubMenu(botToken, chatId, dbUrl, devId) {
-  const devices = await getDevicesFromFirebase(dbUrl);
-  const dev = devices[devId] || { name: devId, battery: 0, isLocked: false, isInternetBlocked: false };
+async function sendDeviceSubMenu(botToken, chatId, dbUrl, devId, cachedDev = null) {
+  let dev = cachedDev;
+  if (!dev) {
+    const devices = await getDevicesFromFirebase(dbUrl);
+    dev = devices[devId] || { name: devId, battery: 0, isLocked: false, isInternetBlocked: false };
+  }
+  const displayName = getDeviceDisplayName(devId, dev);
 
   const onlineInfo = getDeviceOnlineStatus(dev.lastSeen);
   const lockStatus = dev.isLocked ? "🔒 Terkunci" : "🔓 Terbuka";
@@ -236,10 +276,10 @@ async function sendDeviceSubMenu(botToken, chatId, dbUrl, devId) {
     ]
   ];
 
-  const text = `📱 <b>KENDALI PERANGKAT: ${dev.name}</b>\n` +
+  const text = `📱 <b>KENDALI PERANGKAT: ${displayName}</b>\n` +
                `━━━━━━━━━━━━━━━━━━━\n` +
                `📡 Status Koneksi: <b>${onlineInfo.text}</b>\n` +
-               `🔋 Baterai       : ${dev.battery}%\n` +
+               `🔋 Baterai       : ${dev.battery || 0}%\n` +
                `🔒 Status Layar  : ${lockStatus}\n` +
                `📶 Status Internet: ${netStatus}\n` +
                `📱 Sedang Dibuka : <b>${curApp}</b>\n` +
@@ -258,24 +298,37 @@ async function sendDeviceCommand(botToken, chatId, dbUrl, devId, action) {
   };
 
   try {
+    // 1. Kirim perintah real-time ke Firebase (Push ke HP <100ms)
     await fetch(`${dbUrl}/devices/${devId}/command.json`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
 
-    // Cek status apakah online
+    // 2. Ambil data perangkat & terapkan Optimistic UI (0ms jeda, respon instan ke Telegram)
     const devices = await getDevicesFromFirebase(dbUrl);
-    const dev = devices[devId];
+    const dev = devices[devId] ? { ...devices[devId] } : {};
+    const displayName = getDeviceDisplayName(devId, dev);
     const onlineInfo = getDeviceOnlineStatus(dev?.lastSeen);
 
-    if (onlineInfo.isOnline) {
-      await sendTelegramMessage(botToken, chatId, `⚡ Perintah <b>${action}</b> telah dikirim ke perangkat <b>${devId}</b>!`);
-    } else {
-      await sendTelegramMessage(botToken, chatId, `⏳ Perintah <b>${action}</b> telah dicatat di antrean server untuk <b>${devId}</b>!\n<i>(Perangkat sedang OFFLINE, perintah akan aktif otomatis begitu HP online)</i>`);
+    // Optimistic state: status langsung sinkron di tampilan Telegram seketika itu juga
+    if (action === "LOCK") {
+      dev.isLocked = true;
+    } else if (action === "UNLOCK" || action.startsWith("UNLOCK")) {
+      dev.isLocked = false;
+    } else if (action === "NETOFF" || action === "INTERNET_OFF" || action === "NET30") {
+      dev.isInternetBlocked = true;
+    } else if (action === "NETON" || action === "INTERNET_ON") {
+      dev.isInternetBlocked = false;
     }
 
-    await sendDeviceSubMenu(botToken, chatId, dbUrl, devId);
+    if (onlineInfo.isOnline) {
+      await sendTelegramMessage(botToken, chatId, `⚡ Perintah <b>${action}</b> telah dieksekusi pada perangkat <b>${displayName}</b>!`);
+    } else {
+      await sendTelegramMessage(botToken, chatId, `⏳ Perintah <b>${action}</b> telah dicatat di antrean server untuk <b>${displayName}</b>!\n<i>(Perangkat sedang OFFLINE, perintah akan aktif otomatis begitu HP online)</i>`);
+    }
+
+    await sendDeviceSubMenu(botToken, chatId, dbUrl, devId, dev);
   } catch (err) {
     await sendTelegramMessage(botToken, chatId, `❌ Gagal mengirim perintah: ${err.message}`);
   }
@@ -284,7 +337,7 @@ async function sendDeviceCommand(botToken, chatId, dbUrl, devId, action) {
 // Mengirim Perintah ke Semua Perangkat Serentak (Broadcast)
 async function broadcastCommand(botToken, chatId, dbUrl, action) {
   const devices = await getDevicesFromFirebase(dbUrl);
-  const keys = Object.keys(devices);
+  const keys = Object.keys(devices).filter(k => k.startsWith("device_") || devices[k]?.model || devices[k]?.name);
 
   if (keys.length === 0) {
     await sendTelegramMessage(botToken, chatId, "⚠️ Belum ada perangkat terdaftar untuk di-broadcast.");
@@ -308,7 +361,18 @@ async function broadcastCommand(botToken, chatId, dbUrl, action) {
 // Menampilkan Status Semua Perangkat
 async function sendAllDevicesStatus(botToken, chatId, dbUrl) {
   const devices = await getDevicesFromFirebase(dbUrl);
-  const keys = Object.keys(devices);
+  const keys = Object.keys(devices).filter(k => k.startsWith("device_") || devices[k]?.model || devices[k]?.name);
+
+  // Urutkan prioritas: Kakak (Redmi 9T), Adik (Redmi Note 9 Pro), Tablet, lalu lainnya
+  const priority = ["device_redmi9t", "device_note9pro", "device_padse", "device_iqooz10"];
+  keys.sort((a, b) => {
+    const idxA = priority.indexOf(a);
+    const idxB = priority.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
 
   if (keys.length === 0) {
     await sendTelegramMessage(botToken, chatId, "Belum ada perangkat terdaftar.");
@@ -321,8 +385,9 @@ async function sendAllDevicesStatus(botToken, chatId, dbUrl) {
     const lk = d.isLocked ? "🔒" : "🔓";
     const net = d.isInternetBlocked ? "❌ Net Off" : "✅ Net On";
     const st = getDeviceOnlineStatus(d.lastSeen);
-    text += `${lk} <b>${d.name || k}</b> (${st.text})\n` +
-            `   🔋 Baterai: ${d.battery}% | ${net}\n` +
+    const displayName = getDeviceDisplayName(k, d);
+    text += `${lk} <b>${displayName}</b> (${st.text})\n` +
+            `   🔋 Baterai: ${d.battery || 0}% | ${net}\n` +
             `   📱 Sedang buka: ${d.currentApp || "Layar Utama"}\n\n`;
   }
   text += "━━━━━━━━━━━━━━━━━━━";
