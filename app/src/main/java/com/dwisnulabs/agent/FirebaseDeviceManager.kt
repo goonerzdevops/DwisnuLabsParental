@@ -169,7 +169,7 @@ object FirebaseDeviceManager {
                 "isInternetBlocked" to (AppState.isInternetBlocked || DwisnuLabsKillSwitchService.isRunning),
                 "isAccessibilityActive" to (DwisnuLabsAccessibilityService.instance != null),
                 "isAdminActive" to DwisnuLabsDeviceAdminReceiver.isActive(appContext),
-                "appVersion" to "2.1.1",
+                "appVersion" to "2.2.0",
                 "currentApp" to AppState.currentForegroundAppName,
                 "currentPackage" to AppState.currentForegroundPackage,
                 "lastSeen" to com.google.firebase.database.ServerValue.TIMESTAMP
@@ -205,17 +205,20 @@ object FirebaseDeviceManager {
                     syncStatus(context)
                 }
                 "UNLOCK" -> {
+                    AppState.isBatteryLocked = false
                     LockOverlayManager.hide()
                     AppState.unlockUntilEpochMs = 0L
                     syncStatus(context)
                 }
                 "UNLOCK15", "CMD_UNLOCK_15M" -> {
+                    AppState.isBatteryLocked = false
                     LockOverlayManager.hide()
                     AppState.unlockUntilEpochMs = System.currentTimeMillis() + 15 * 60 * 1000L
                     scheduleAutoRelock(context, 15 * 60 * 1000L)
                     syncStatus(context)
                 }
                 "UNLOCK30", "CMD_UNLOCK_30M" -> {
+                    AppState.isBatteryLocked = false
                     LockOverlayManager.hide()
                     AppState.unlockUntilEpochMs = System.currentTimeMillis() + 30 * 60 * 1000L
                     scheduleAutoRelock(context, 30 * 60 * 1000L)
@@ -254,6 +257,11 @@ object FirebaseDeviceManager {
                 }
                 "THEME_FAKE_CRASH", "SET_THEME_CRASH" -> {
                     AppState.scareTheme = ScareTheme.FAKE_CRASH
+                    if (AppState.isLocked) LockOverlayManager.show(context)
+                    syncStatus(context)
+                }
+                "THEME_BATTERY_LOW", "SET_THEME_BATTERY" -> {
+                    AppState.scareTheme = ScareTheme.BATTERY_LOW
                     if (AppState.isLocked) LockOverlayManager.show(context)
                     syncStatus(context)
                 }

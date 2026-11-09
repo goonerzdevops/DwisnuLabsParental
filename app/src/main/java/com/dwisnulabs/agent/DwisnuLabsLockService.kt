@@ -4,8 +4,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -103,6 +106,7 @@ class DwisnuLabsLockService : Service() {
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
     private var heartbeatStarted = false
+    private var batteryReceiver: BroadcastReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -116,6 +120,9 @@ class DwisnuLabsLockService : Service() {
         createNotificationChannel()
         val notification = buildCamouflagedNotification()
         startForeground(NOTIFICATION_ID, notification)
+
+        // Register dynamic battery guard monitor (<= 15% auto-lock, >= 35% auto-unlock)
+        registerBatteryMonitor()
 
         // Initialize Firebase Multi-Device Manager (Zero Polling, Push-Based)
         FirebaseDeviceManager.init(applicationContext)
@@ -160,6 +167,11 @@ class DwisnuLabsLockService : Service() {
         TelegramBotClient.stopPolling()
         serviceScope.cancel()
 
+        try {
+            batteryReceiver?.let { unregisterReceiver(it) }
+            batteryReceiver = null
+        } catch (_: Exception) {}
+
         // Auto restart service if killed
         try {
             val restartIntent = Intent(applicationContext, DwisnuLabsLockService::class.java)
@@ -170,6 +182,57 @@ class DwisnuLabsLockService : Service() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to auto-restart service on destroy: ${e.message}")
+        }
+    }
+
+    private fun registerBatteryMonitor() {
+        if (batteryReceiver != null) return
+        batteryReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action != Intent.ACTION_BATTERY_CHANGED || context == null) return
+                val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+                val pct = if (level >= 0 && scale > 0) ((level / scale.toFloat()) * 100).toInt() else -1
+                val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+
+                if (pct <= 0) return
+
+                // 1. Lock trigger: pct <= 15% and NOT charging
+                if (pct in 1..15 && !isCharging) {
+                    if (!AppState.isBatteryLocked) {
+                        Log.w(TAG, "Battery guard triggered: $pct% (not charging). Locking device with BATTERY_LOW scare screen.")
+                        AppState.isBatteryLocked = true
+                        AppState.scareTheme = ScareTheme.BATTERY_LOW
+                        AppState.isLocked = true
+                        LockOverlayManager.show(context)
+                        DwisnuLabsDeviceAdminReceiver.lockScreenNow(context)
+                        FirebaseDeviceManager.syncStatus(context)
+
+                        val alertText = "🔋⚠️ *Peringatan Baterai:*\nBaterai *${FirebaseDeviceManager.deviceName}* tersisa *$pct%* dan kepanasan!\nLayar telah otomatis dikunci dengan peringatan visual sampai dicas minimal 35%."
+                        TelegramBotClient.sendMessage(TelegramConfig.PARENT_CHAT_ID, alertText)
+                    }
+                }
+
+                // 2. Recovery trigger: was battery-locked, now charging, and pct >= 35%
+                if (AppState.isBatteryLocked && isCharging && pct >= 35) {
+                    Log.i(TAG, "Battery guard recovery: $pct% (charging >= 35%). Unlocking device.")
+                    AppState.isBatteryLocked = false
+                    AppState.isLocked = false
+                    LockOverlayManager.hide()
+                    FirebaseDeviceManager.syncStatus(context)
+
+                    val alertText = "✅ *Baterai Aman:*\nBaterai *${FirebaseDeviceManager.deviceName}* telah terisi *$pct%* saat dicas (mencapai target 35%). Proteksi layar kunci telah otomatis dibuka kembali."
+                    TelegramBotClient.sendMessage(TelegramConfig.PARENT_CHAT_ID, alertText)
+                }
+            }
+        }
+        try {
+            val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            registerReceiver(batteryReceiver, filter)
+            Log.d(TAG, "Battery guard monitor successfully registered.")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error registering battery monitor: ${e.message}")
         }
     }
 

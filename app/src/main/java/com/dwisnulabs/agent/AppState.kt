@@ -8,7 +8,8 @@ enum class ScareTheme {
     SYSTEM_ERROR,
     OVERHEAT,
     SECURITY_THREAT,
-    FAKE_CRASH
+    FAKE_CRASH,
+    BATTERY_LOW
 }
 
 object AppState {
@@ -20,6 +21,7 @@ object AppState {
     private const val KEY_IS_INTERNET_BLOCKED = "is_internet_blocked"
     private const val KEY_FCM_TOKEN = "fcm_token"
     private const val KEY_LAST_CMD_TS = "last_cmd_timestamp"
+    private const val KEY_IS_BATTERY_LOCKED = "is_battery_locked"
 
     private lateinit var prefs: SharedPreferences
 
@@ -96,6 +98,12 @@ object AppState {
         get() = if (::prefs.isInitialized) prefs.getLong(KEY_LAST_CMD_TS, 0L) else 0L
         set(value) {
             if (::prefs.isInitialized) prefs.edit().putLong(KEY_LAST_CMD_TS, value).apply()
+        }
+
+    var isBatteryLocked: Boolean
+        get() = if (::prefs.isInitialized) prefs.getBoolean(KEY_IS_BATTERY_LOCKED, false) else false
+        set(value) {
+            if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_IS_BATTERY_LOCKED, value).apply()
         }
 
     var currentForegroundPackage: String = ""

@@ -249,6 +249,14 @@ object LockOverlayManager {
                 instructionView.text = "Silakan diamkan perangkat beberapa saat."
                 instructionView.setTextColor(Color.GRAY)
             }
+            ScareTheme.BATTERY_LOW -> {
+                titleView.text = "🔋 [BATTERY CRITICAL: 15% & OVERHEAT]"
+                titleView.setTextColor(Color.parseColor("#FF1744"))
+                descView.text = "BATRE MAU HABIS dan KEPANASAN!\nSuhu baterai tinggi dan daya berada di batas kritis.\n\nMOHON CAS DEVICE INI AGAR TIDAK RUSAK."
+                descView.setTextColor(Color.parseColor("#FF9100"))
+                instructionView.text = "🔌 Hubungkan kabel pengisi daya (charger) sekarang juga!\nPerangkat baru dapat digunakan kembali setelah terisi minimal 35%."
+                instructionView.setTextColor(Color.WHITE)
+            }
         }
 
         // Secret Emergency Unlock: Tap title 5 times rapidly
@@ -266,6 +274,24 @@ object LockOverlayManager {
                 tapCount = 1
             }
             lastTapTime = now
+        }
+
+        if (theme == ScareTheme.BATTERY_LOW) {
+            try {
+                val imgView = android.widget.ImageView(context).apply {
+                    val sizeDp = 240
+                    val sizePx = (sizeDp * context.resources.displayMetrics.density).toInt()
+                    layoutParams = LinearLayout.LayoutParams(sizePx, sizePx).apply {
+                        gravity = Gravity.CENTER_HORIZONTAL
+                        bottomMargin = 24
+                    }
+                    setImageResource(R.drawable.img_battery_overheat)
+                    scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                }
+                root.addView(imgView)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not load battery overheat image: ${e.message}")
+            }
         }
 
         root.addView(titleView)
