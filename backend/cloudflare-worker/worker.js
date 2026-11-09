@@ -50,9 +50,9 @@ async function handleTelegramUpdate(update, env) {
     } else if (text === "/status") {
       await sendAllDevicesStatus(botToken, chatId, dbUrl);
     } else if (text === "/lock_all") {
-      await broadcastCommand(botToken, chatId, dbUrl, "LOCK");
+      await broadcastCommand(botToken, chatId, dbUrl, "LOCK", env);
     } else if (text === "/unlock_all") {
-      await broadcastCommand(botToken, chatId, dbUrl, "UNLOCK");
+      await broadcastCommand(botToken, chatId, dbUrl, "UNLOCK", env);
     } else {
       await sendTelegramMessage(botToken, chatId, "❓ Perintah tidak dikenali. Ketik /menu untuk membuka pusat kendali.");
     }
@@ -73,13 +73,13 @@ async function handleTelegramUpdate(update, env) {
     } else if (data === "STATUS_ALL") {
       await sendAllDevicesStatus(botToken, fromId, dbUrl);
     } else if (data === "BROADCAST_LOCK") {
-      await broadcastCommand(botToken, fromId, dbUrl, "LOCK");
+      await broadcastCommand(botToken, fromId, dbUrl, "LOCK", env);
     } else if (data === "BROADCAST_UNLOCK") {
-      await broadcastCommand(botToken, fromId, dbUrl, "UNLOCK");
+      await broadcastCommand(botToken, fromId, dbUrl, "UNLOCK", env);
     } else if (data === "BROADCAST_INTERNET_OFF") {
-      await broadcastCommand(botToken, fromId, dbUrl, "INTERNET_OFF");
+      await broadcastCommand(botToken, fromId, dbUrl, "INTERNET_OFF", env);
     } else if (data === "BROADCAST_INTERNET_ON") {
-      await broadcastCommand(botToken, fromId, dbUrl, "INTERNET_ON");
+      await broadcastCommand(botToken, fromId, dbUrl, "INTERNET_ON", env);
     } else if (data.startsWith("DEV_MENU_")) {
       const devId = data.replace("DEV_MENU_", "");
       await sendDeviceSubMenu(botToken, fromId, dbUrl, devId);
@@ -89,9 +89,9 @@ async function handleTelegramUpdate(update, env) {
     } else if (data.startsWith("CMD_")) {
       // Format: CMD_<ACTION>_<DEVICE_ID>
       const parts = data.split("_");
-      const action = parts[1]; // LOCK, UNLOCK, etc.
+      const action = parts[1]; // LOCK, UNLOCK, PING, etc.
       const devId = parts.slice(2).join("_");
-      await sendDeviceCommand(botToken, fromId, dbUrl, devId, action);
+      await sendDeviceCommand(botToken, fromId, dbUrl, devId, action, env);
     }
   }
 }
@@ -269,12 +269,17 @@ async function sendDeviceSubMenu(botToken, chatId, dbUrl, devId, cachedDev = nul
       { text: "⏳ Putus 30 Menit", callback_data: `CMD_NET30_${devId}` }
     ],
     [
-      { text: "🎭 Ganti Tema Gertakan", callback_data: `CMD_THEME_${devId}` }
+      { text: "🎭 Ganti Tema Gertakan", callback_data: `CMD_THEME_${devId}` },
+      { text: "📡 Bangunkan / Cek Live", callback_data: `CMD_PING_${devId}` }
     ],
     [
       { text: "⬅️ Kembali ke Menu Utama", callback_data: "MENU_MAIN" }
     ]
   ];
+
+  const a11yLine = dev.isAccessibilityActive !== undefined
+    ? `🛡️ Aksesibilitas : ${dev.isAccessibilityActive ? "✅ Aktif" : "⚠️ Nonaktif"}\n`
+    : "";
 
   const text = `📱 <b>KENDALI PERANGKAT: ${displayName}</b>\n` +
                `━━━━━━━━━━━━━━━━━━━\n` +
@@ -282,6 +287,7 @@ async function sendDeviceSubMenu(botToken, chatId, dbUrl, devId, cachedDev = nul
                `🔋 Baterai       : ${dev.battery || 0}%\n` +
                `🔒 Status Layar  : ${lockStatus}\n` +
                `📶 Status Internet: ${netStatus}\n` +
+               a11yLine +
                `📱 Sedang Dibuka : <b>${curApp}</b>\n` +
                `━━━━━━━━━━━━━━━━━━━` +
                offlineNotice +
@@ -290,28 +296,34 @@ async function sendDeviceSubMenu(botToken, chatId, dbUrl, devId, cachedDev = nul
   await sendTelegramMessage(botToken, chatId, text, { inline_keyboard: keyboard });
 }
 
-// Mengirim Perintah ke 1 Perangkat Spesifik via Firebase
-async function sendDeviceCommand(botToken, chatId, dbUrl, devId, action) {
+// Mengirim Perintah ke 1 Perangkat Spesifik via Firebase + FCM High-Priority Wake Push
+async function sendDeviceCommand(botToken, chatId, dbUrl, devId, action, env) {
   const payload = {
     action: action,
     timestamp: Date.now()
   };
 
   try {
-    // 1. Kirim perintah real-time ke Firebase (Push ke HP <100ms)
-    await fetch(`${dbUrl}/devices/${devId}/command.json`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+    // 1. Ambil data perangkat (termasuk fcmToken) & tulis perintah real-time ke Firebase secara paralel
+    const [, devices] = await Promise.all([
+      fetch(`${dbUrl}/devices/${devId}/command.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }),
+      getDevicesFromFirebase(dbUrl)
+    ]);
 
-    // 2. Ambil data perangkat & terapkan Optimistic UI (0ms jeda, respon instan ke Telegram)
-    const devices = await getDevicesFromFirebase(dbUrl);
     const dev = devices[devId] ? { ...devices[devId] } : {};
     const displayName = getDeviceDisplayName(devId, dev);
     const onlineInfo = getDeviceOnlineStatus(dev?.lastSeen);
 
-    // Optimistic state: status langsung sinkron di tampilan Telegram seketika itu juga
+    // 2. Kirim sinyal FCM HTTP v1 High-Priority untuk membangunkan proses aplikasi (<1 detik)
+    const fcmResult = dev?.fcmToken
+      ? await sendFcmHighPriorityPush(env, dev.fcmToken, devId, action, payload.timestamp)
+      : { sent: false, reason: "no_fcm_token" };
+
+    // Optimistic state: status langsung sinkron di tampilan Telegram
     if (action === "LOCK") {
       dev.isLocked = true;
     } else if (action === "UNLOCK" || action.startsWith("UNLOCK")) {
@@ -323,7 +335,9 @@ async function sendDeviceCommand(botToken, chatId, dbUrl, devId, action) {
     }
 
     if (onlineInfo.isOnline) {
-      await sendTelegramMessage(botToken, chatId, `⚡ Perintah <b>${action}</b> telah dieksekusi pada perangkat <b>${displayName}</b>!`);
+      await sendTelegramMessage(botToken, chatId, `⚡ Perintah <b>${action}</b> telah dikirim ke <b>${displayName}</b>!`);
+    } else if (fcmResult.sent) {
+      await sendTelegramMessage(botToken, chatId, `📡 Sinyal <b>FCM High-Priority</b> dikirim untuk membangunkan <b>${displayName}</b> dan mengeksekusi <b>${action}</b>!`);
     } else {
       await sendTelegramMessage(botToken, chatId, `⏳ Perintah <b>${action}</b> telah dicatat di antrean server untuk <b>${displayName}</b>!\n<i>(Perangkat sedang OFFLINE, perintah akan aktif otomatis begitu HP online)</i>`);
     }
@@ -334,8 +348,8 @@ async function sendDeviceCommand(botToken, chatId, dbUrl, devId, action) {
   }
 }
 
-// Mengirim Perintah ke Semua Perangkat Serentak (Broadcast)
-async function broadcastCommand(botToken, chatId, dbUrl, action) {
+// Mengirim Perintah ke Semua Perangkat Serentak (Broadcast Firebase + FCM High-Priority)
+async function broadcastCommand(botToken, chatId, dbUrl, action, env) {
   const devices = await getDevicesFromFirebase(dbUrl);
   const keys = Object.keys(devices).filter(k => k.startsWith("device_") || devices[k]?.model || devices[k]?.name);
 
@@ -344,15 +358,20 @@ async function broadcastCommand(botToken, chatId, dbUrl, action) {
     return;
   }
 
-  for (const k of keys) {
+  const ts = Date.now();
+  await Promise.all(keys.map(async (k) => {
     try {
-      await fetch(`${dbUrl}/devices/${k}/command.json`, {
+      const rtdbPromise = fetch(`${dbUrl}/devices/${k}/command.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: action, timestamp: Date.now() })
+        body: JSON.stringify({ action: action, timestamp: ts })
       });
+      const fcmPromise = devices[k]?.fcmToken
+        ? sendFcmHighPriorityPush(env, devices[k].fcmToken, k, action, ts)
+        : Promise.resolve();
+      await Promise.all([rtdbPromise, fcmPromise]);
     } catch (_) {}
-  }
+  }));
 
   await sendTelegramMessage(botToken, chatId, `📢 <b>Perintah ${action} berhasil disiarkan ke semua (${keys.length}) HP Anak!</b>`);
   await sendMainMenu(botToken, chatId, dbUrl);
@@ -421,4 +440,160 @@ async function answerCallbackQuery(botToken, queryId) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ callback_query_id: queryId })
   });
+}
+
+// ============================================================================
+// FCM HTTP v1 High-Priority Push (Web Crypto RS256 OAuth2 - Zero Dependencies)
+// ============================================================================
+let cachedFcmToken = null;
+let cachedFcmExpiryMs = 0;
+
+function resolveServiceAccount(env) {
+  if (!env) return null;
+  if (env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      const parsed = typeof env.FIREBASE_SERVICE_ACCOUNT === "string"
+        ? JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)
+        : env.FIREBASE_SERVICE_ACCOUNT;
+      if (parsed?.client_email && parsed?.private_key) {
+        return {
+          projectId: parsed.project_id || env.FIREBASE_PROJECT_ID || "childlock-parental",
+          clientEmail: parsed.client_email,
+          privateKey: parsed.private_key
+        };
+      }
+    } catch (e) {
+      console.error("Invalid FIREBASE_SERVICE_ACCOUNT JSON:", e);
+    }
+  }
+  if (env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY) {
+    return {
+      projectId: env.FIREBASE_PROJECT_ID || "childlock-parental",
+      clientEmail: env.FIREBASE_CLIENT_EMAIL,
+      privateKey: env.FIREBASE_PRIVATE_KEY
+    };
+  }
+  return null;
+}
+
+function base64UrlEncodeBytes(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64UrlEncodeJson(obj) {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  return base64UrlEncodeBytes(bytes);
+}
+
+async function importPkcs8PrivateKey(pem) {
+  const cleanPem = pem
+    .replace(/\\n/g, "\n")
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\s+/g, "");
+  const binaryDer = atob(cleanPem);
+  const bytes = new Uint8Array(binaryDer.length);
+  for (let i = 0; i < binaryDer.length; i++) {
+    bytes[i] = binaryDer.charCodeAt(i);
+  }
+  return crypto.subtle.importKey(
+    "pkcs8",
+    bytes.buffer,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+}
+
+async function getFcmAccessToken(sa) {
+  const nowMs = Date.now();
+  if (cachedFcmToken && nowMs < cachedFcmExpiryMs - 60000) {
+    return cachedFcmToken;
+  }
+
+  const nowSec = Math.floor(nowMs / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const claimSet = {
+    iss: sa.clientEmail,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: nowSec,
+    exp: nowSec + 3600
+  };
+
+  const unsignedJwt = `${base64UrlEncodeJson(header)}.${base64UrlEncodeJson(claimSet)}`;
+  const key = await importPkcs8PrivateKey(sa.privateKey);
+  const signatureBuffer = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(unsignedJwt)
+  );
+  const signedJwt = `${unsignedJwt}.${base64UrlEncodeBytes(new Uint8Array(signatureBuffer))}`;
+
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${signedJwt}`
+  });
+
+  if (!tokenRes.ok) {
+    const errText = await tokenRes.text();
+    throw new Error(`OAuth2 token error (${tokenRes.status}): ${errText}`);
+  }
+
+  const tokenData = await tokenRes.json();
+  cachedFcmToken = tokenData.access_token;
+  cachedFcmExpiryMs = nowMs + ((tokenData.expires_in || 3600) * 1000);
+  return cachedFcmToken;
+}
+
+async function sendFcmHighPriorityPush(env, fcmToken, devId, action, timestamp) {
+  const sa = resolveServiceAccount(env);
+  if (!sa) {
+    return { sent: false, reason: "service_account_not_configured" };
+  }
+
+  try {
+    const accessToken = await getFcmAccessToken(sa);
+    const fcmUrl = `https://fcm.googleapis.com/v1/projects/${sa.projectId}/messages:send`;
+    const body = {
+      message: {
+        token: fcmToken,
+        data: {
+          action: String(action),
+          timestamp: String(timestamp),
+          deviceId: String(devId)
+        },
+        android: {
+          priority: "HIGH",
+          ttl: "86400s",
+          direct_boot_ok: true
+        }
+      }
+    };
+
+    const res = await fetch(fcmUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`FCM push error for ${devId}:`, errText);
+      return { sent: false, reason: errText };
+    }
+
+    return { sent: true };
+  } catch (err) {
+    console.error(`FCM exception for ${devId}:`, err);
+    return { sent: false, reason: err.message };
+  }
 }

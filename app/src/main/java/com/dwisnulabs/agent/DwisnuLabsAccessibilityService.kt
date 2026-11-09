@@ -26,8 +26,11 @@ class DwisnuLabsAccessibilityService : AccessibilityService() {
         instance = this
         Log.d(TAG, "DwisnuLabsAccessibilityService connected.")
         AppState.init(applicationContext)
-        // Watchdog: Auto-start LockService when Accessibility binds
+        KeepAliveSyncReceiver.schedule(applicationContext)
+        StatusSyncWorker.schedule(applicationContext)
         DwisnuLabsLockService.start(applicationContext)
+        FirebaseDeviceManager.init(applicationContext)
+        FirebaseDeviceManager.syncStatus(applicationContext)
         if (AppState.isLocked) {
             LockOverlayManager.show(this)
         }

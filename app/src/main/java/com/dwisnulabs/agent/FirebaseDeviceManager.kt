@@ -12,6 +12,7 @@ import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import com.google.firebase.messaging.FirebaseMessaging
 
 object FirebaseDeviceManager {
     private const val TAG = "DwisnuFirebase"
@@ -62,6 +63,11 @@ object FirebaseDeviceManager {
     }
 
     fun init(context: Context) {
+        val appContext = context.applicationContext
+        AppState.init(appContext)
+        KeepAliveSyncReceiver.schedule(appContext)
+        StatusSyncWorker.schedule(appContext)
+
         if (isInitialized) return
         isInitialized = true
 
@@ -70,42 +76,18 @@ object FirebaseDeviceManager {
             db.goOnline()
             val deviceRef = db.getReference("devices").child(deviceId)
 
-            // 1. Initial Status Sync
-            syncStatus(context)
+            // 1. Initial Status Sync & FCM Token Registration
+            syncStatus(appContext)
+            refreshFcmToken()
 
             // 2. Command Listener (Zero Polling - Push-Triggered via SSE)
             val cmdRef = deviceRef.child("command")
             cmdRef.keepSynced(true)
             cmdRef.addValueEventListener(object : ValueEventListener {
-                private var initialLoad = true
-
                 override fun onDataChange(snapshot: DataSnapshot) {
                     val action = snapshot.child("action").value?.toString() ?: return
                     val timestamp = (snapshot.child("timestamp").value as? Number)?.toLong() ?: 0L
-
-                    // Handle initial load / boot commands without discarding critical state changes
-                    if (initialLoad) {
-                        initialLoad = false
-                        val ageMs = Math.abs(System.currentTimeMillis() - timestamp)
-                        val isStale = ageMs > 15 * 60 * 1000L // 15 minutes tolerance
-
-                        // Never skip if the device's actual current state doesn't match the command
-                        val shouldSkip = when (action.uppercase()) {
-                            "LOCK" -> AppState.isLocked // Only skip if already locked
-                            "UNLOCK" -> !AppState.isLocked // Only skip if already unlocked
-                            "INTERNET_OFF", "NETOFF" -> AppState.isInternetBlocked
-                            "INTERNET_ON", "NETON" -> !AppState.isInternetBlocked
-                            else -> isStale
-                        }
-
-                        if (shouldSkip && isStale) {
-                            Log.d(TAG, "Ignoring stale initial command: $action (age: ${ageMs / 1000}s)")
-                            return
-                        }
-                    }
-
-                    Log.d(TAG, "Incoming Firebase Command: $action (timestamp: $timestamp)")
-                    executeCommand(context.applicationContext, action)
+                    onIncomingCommand(appContext, action, timestamp)
                 }
 
                 override fun onCancelled(error: DatabaseError) {
@@ -119,21 +101,82 @@ object FirebaseDeviceManager {
         }
     }
 
+    fun refreshFcmToken() {
+        try {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                if (!token.isNullOrBlank()) {
+                    AppState.fcmToken = token
+                    updateFcmToken(token)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to fetch FCM token: ${e.message}")
+        }
+    }
+
+    fun updateFcmToken(token: String) {
+        if (token.isBlank()) return
+        try {
+            getDatabase()
+                .getReference("devices")
+                .child(deviceId)
+                .child("fcmToken")
+                .setValue(token)
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to store FCM token: ${e.message}")
+        }
+    }
+
+    @Synchronized
+    fun onIncomingCommand(context: Context, action: String, timestamp: Long) {
+        val appContext = context.applicationContext
+        AppState.init(appContext)
+        val lastTs = AppState.lastExecutedCmdTimestamp
+
+        if (timestamp > 0L && timestamp <= lastTs) {
+            val stateMismatch = when (action.uppercase().replace("-", "_")) {
+                "LOCK" -> !AppState.isLocked
+                "UNLOCK" -> AppState.isLocked
+                "INTERNET_OFF", "NETOFF" -> !AppState.isInternetBlocked
+                "INTERNET_ON", "NETON" -> AppState.isInternetBlocked
+                else -> false
+            }
+            if (!stateMismatch) {
+                Log.d(TAG, "Skipping already-processed command: $action (ts=$timestamp, lastTs=$lastTs)")
+                return
+            }
+        }
+
+        if (timestamp > lastTs) {
+            AppState.lastExecutedCmdTimestamp = timestamp
+        }
+        Log.d(TAG, "Executing command: $action (timestamp: $timestamp)")
+        executeCommand(appContext, action)
+    }
+
     fun syncStatus(context: Context) {
         try {
+            val appContext = context.applicationContext
+            AppState.init(appContext)
             val db = getDatabase()
             val deviceRef = db.getReference("devices").child(deviceId)
 
             val statusMap = hashMapOf<String, Any>(
                 "name" to deviceName,
                 "model" to (Build.MODEL ?: "Unknown"),
-                "battery" to getBatteryPercentage(context),
+                "battery" to getBatteryPercentage(appContext),
                 "isLocked" to AppState.isLocked,
                 "isInternetBlocked" to (AppState.isInternetBlocked || DwisnuLabsKillSwitchService.isRunning),
+                "isAccessibilityActive" to (DwisnuLabsAccessibilityService.instance != null),
+                "isAdminActive" to DwisnuLabsDeviceAdminReceiver.isActive(appContext),
+                "appVersion" to "2.1.1",
                 "currentApp" to AppState.currentForegroundAppName,
                 "currentPackage" to AppState.currentForegroundPackage,
                 "lastSeen" to com.google.firebase.database.ServerValue.TIMESTAMP
             )
+            if (AppState.fcmToken.isNotBlank()) {
+                statusMap["fcmToken"] = AppState.fcmToken
+            }
 
             deviceRef.updateChildren(statusMap)
             Log.d(TAG, "Synced status for $deviceId: Batt=${statusMap["battery"]}%, App=${statusMap["currentApp"]}")
@@ -153,8 +196,12 @@ object FirebaseDeviceManager {
         mainHandler.post {
             val normalized = action.uppercase().replace("-", "_")
             when (normalized) {
+                "PING", "SYNC" -> {
+                    syncStatus(context)
+                }
                 "LOCK" -> {
                     LockOverlayManager.show(context)
+                    DwisnuLabsDeviceAdminReceiver.lockScreenNow(context)
                     syncStatus(context)
                 }
                 "UNLOCK" -> {
@@ -221,6 +268,7 @@ object FirebaseDeviceManager {
         mainHandler.postDelayed({
             if (AppState.unlockUntilEpochMs > 0 && System.currentTimeMillis() >= AppState.unlockUntilEpochMs) {
                 LockOverlayManager.show(context)
+                DwisnuLabsDeviceAdminReceiver.lockScreenNow(context)
                 syncStatus(context)
             }
         }, delayMs)

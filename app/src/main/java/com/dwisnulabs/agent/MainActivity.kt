@@ -1,6 +1,7 @@
 package com.dwisnulabs.agent
 
 import android.app.Activity
+import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -30,6 +31,8 @@ class MainActivity : Activity() {
         AppState.init(applicationContext)
 
         // Auto start core service on activity open
+        KeepAliveSyncReceiver.schedule(applicationContext)
+        StatusSyncWorker.schedule(applicationContext)
         DwisnuLabsLockService.start(applicationContext)
         FirebaseDeviceManager.init(applicationContext)
         FirebaseDeviceManager.syncStatus(applicationContext)
@@ -144,6 +147,8 @@ class MainActivity : Activity() {
         addInfoRow("Model Perangkat", Build.MODEL ?: "Unknown", Color.WHITE)
         addInfoRow("Board / Codename", Build.DEVICE ?: "Unknown", Color.LTGRAY)
         addInfoRow("Versi Android", "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})", Color.WHITE)
+        val fcmReady = AppState.fcmToken.isNotBlank()
+        addInfoRow("FCM Push Channel", if (fcmReady) "✅ Terdaftar" else "⏳ Menghubungkan...", if (fcmReady) Color.parseColor("#81C784") else Color.parseColor("#FFD54F"))
 
         val hasOverlay = Settings.canDrawOverlays(this)
         addPermissionRow("1. Tampilkan di Atas Aplikasi Lain", hasOverlay) {
@@ -168,6 +173,21 @@ class MainActivity : Activity() {
                 }
                 startActivity(intent)
             }
+        }
+
+        val hasAdmin = DwisnuLabsDeviceAdminReceiver.isActive(this)
+        addPermissionRow("4. Proteksi Admin Perangkat", hasAdmin) {
+            val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+                putExtra(
+                    DevicePolicyManager.EXTRA_DEVICE_ADMIN,
+                    DwisnuLabsDeviceAdminReceiver.getComponentName(this@MainActivity)
+                )
+                putExtra(
+                    DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                    "Aktifkan perlindungan Parental Control agar pengaturan perangkat anak tetap terjaga."
+                )
+            }
+            startActivity(intent)
         }
 
         val isXiaomi = (Build.MANUFACTURER ?: "").contains("Xiaomi", ignoreCase = true) || 

@@ -18,7 +18,26 @@ Script `worker.js` di folder ini bertindak sebagai **Otak Serverless Telegram Bo
    ```bash
    npx wrangler deploy
    ```
-   *Setiap kali ada perubahan kode di `worker.js`, cukup jalankan `npx wrangler deploy` lagi.*
+   *Setiap kali ada perubahan kode di `worker.js`, cukup jalankan `npx.cmd wrangler deploy` lagi.*
+
+---
+
+### ⚡ Konfigurasi FCM HTTP v1 High-Priority Wake-Up (Agar HP Bangun < 1 Detik Saat Proses Mati)
+
+Agar Cloudflare Worker dapat membangunkan perangkat yang terhenti oleh penghemat RAM Xiaomi/HyperOS melalui Google Play Services (`FCM High-Priority`):
+
+1. Buka [Firebase Console](https://console.firebase.google.com/) -> pilih project **`childlock-parental`**.
+2. Klik ikon ⚙️ **Project Settings** -> tab **Service accounts** -> klik **Generate new private key** (unduh file `.json`).
+3. Simpan isi file `.json` tersebut ke Secret Cloudflare Worker (cukup 1 kali):
+   ```powershell
+   cd backend/cloudflare-worker
+   npx.cmd wrangler secret put FIREBASE_SERVICE_ACCOUNT
+   ```
+   *(Paste seluruh isi file `.json` Service Account tersebut lalu tekan Enter).*
+4. Deploy pembaruan worker:
+   ```powershell
+   npx.cmd wrangler deploy
+   ```
 
 ---
 

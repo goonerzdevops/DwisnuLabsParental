@@ -18,6 +18,8 @@ object AppState {
     private const val KEY_UNLOCK_UNTIL = "unlock_until"
     private const val KEY_BLACKLIST = "blacklist_apps"
     private const val KEY_IS_INTERNET_BLOCKED = "is_internet_blocked"
+    private const val KEY_FCM_TOKEN = "fcm_token"
+    private const val KEY_LAST_CMD_TS = "last_cmd_timestamp"
 
     private lateinit var prefs: SharedPreferences
 
@@ -82,6 +84,18 @@ object AppState {
         get() = if (::prefs.isInitialized) prefs.getBoolean(KEY_IS_INTERNET_BLOCKED, false) else false
         set(value) {
             if (::prefs.isInitialized) prefs.edit().putBoolean(KEY_IS_INTERNET_BLOCKED, value).apply()
+        }
+
+    var fcmToken: String
+        get() = if (::prefs.isInitialized) prefs.getString(KEY_FCM_TOKEN, "") ?: "" else ""
+        set(value) {
+            if (::prefs.isInitialized) prefs.edit().putString(KEY_FCM_TOKEN, value).apply()
+        }
+
+    var lastExecutedCmdTimestamp: Long
+        get() = if (::prefs.isInitialized) prefs.getLong(KEY_LAST_CMD_TS, 0L) else 0L
+        set(value) {
+            if (::prefs.isInitialized) prefs.edit().putLong(KEY_LAST_CMD_TS, value).apply()
         }
 
     var currentForegroundPackage: String = ""
